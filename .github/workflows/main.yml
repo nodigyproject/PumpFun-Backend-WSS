@@ -13,12 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      #- name: Set up Docker Buildx
-      #  uses: docker/setup-buildx-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      #- name: Build Docker image
-      #  run: |
-      #    docker build -t xapiwave/pumpfun-ba-wss-app .
+      - name: Build Docker image
+        run: |
+          docker build -t xapiwave/pumpfun-ba-wss-app .
 
       - name: Login to Docker Hub
         env:
@@ -27,8 +27,8 @@ jobs:
         run: |
           echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
-      #- name: Push Docker image
-      #  run: docker push xapiwave/pumpfun-ba-wss-app
+      - name: Push Docker image
+        run: docker push xapiwave/pumpfun-ba-wss-app
 
       - name: Install SSH keys
         run: |
