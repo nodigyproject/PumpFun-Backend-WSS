@@ -1,1 +1,1 @@
-# PumpFun-Backend-WSS
+## Solana PumpFun sniper bot
