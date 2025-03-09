@@ -644,10 +644,7 @@ function isSignatureProcessed(signature: string): boolean {
  * Main sniper service function
  * Listens for new token creations and initiates monitoring
  */
-/**
- * Main sniper service function
- * Listens for new token creations and initiates monitoring
- */
+
 export async function sniperService() {
   logger.info(`${START_TXT.sniper} | Solana Pumpfun Sniper Bot started at ${new Date().toISOString()}`);
   logger.info(`[⚙️ CONFIG] Buy monitoring cycle: ${BUY_MONITOR_CYCLE/1000}s | Mode: ${USE_WSS ? 'WebSocket' : 'Interval'}-based monitoring`);
@@ -703,10 +700,17 @@ export async function sniperService() {
 
             try {
               // Extract account information
-              //@ts-ignore
-              const accountKeys = txn?.transaction.message.instructions.find(
-                (ix) => ix.programId && ix.programId.toString() === PUMP_WALLET.toBase58()
-              )?.accounts as PublicKey[];
+              const instructions = txn.transaction?.message?.instructions || [];
+              const pumpInstruction = instructions.find(
+                (ix: any) => ix.programId && ix.programId.toString() === PUMP_WALLET.toBase58()
+              );
+              
+              if (!pumpInstruction || !pumpInstruction.accounts) {
+                logger.error(`[❌ INSTRUCTION-ERROR] No valid PUMP instruction found for ${signature.slice(0, 8)}...`);
+                return;
+              }
+              
+              const accountKeys = pumpInstruction.accounts as PublicKey[];
 
               if (!accountKeys || accountKeys.length < 8) {
                 logger.error(`[❌ KEY-ERROR] Invalid account keys for ${signature.slice(0, 8)}... (length: ${accountKeys?.length || 0})`);
@@ -726,17 +730,20 @@ export async function sniperService() {
               let virtualSolReserves = 30 * LAMPORTS_PER_SOL;
               let virtualTokenReserves = 1000000000 * 10 ** 6;
               
-              if (txn.blockTime && txn.meta) {
+              const txnBlockTime = txn.blockTime as number | undefined;
+              const txnMeta = txn.meta as any | undefined;
+              
+              if (txnBlockTime !== undefined && txnMeta) {
                   try {
                     // Verify account indices exist in the transaction metadata
-                    if (!txn.meta.preBalances || !txn.meta.postBalances || 
-                        txn.meta.preBalances.length === 0 || txn.meta.postBalances.length === 0) {
+                    if (!txnMeta.preBalances || !txnMeta.postBalances || 
+                        txnMeta.preBalances.length === 0 || txnMeta.postBalances.length === 0) {
                       logger.error(`[❌ TX-DATA-ERROR] ${shortMint} | Transaction metadata missing balance information`);
                       return;
                     }
                     
                     const solSpent =
-                      Math.abs(txn.meta.postBalances[0] - txn.meta.preBalances[0]) /
+                      Math.abs(txnMeta.postBalances[0] - txnMeta.preBalances[0]) /
                       LAMPORTS_PER_SOL;
                       
                     logger.info(`[💰 DEV-SPEND] ${shortMint} | Developer spent: ${solSpent.toFixed(6)} SOL`);
@@ -807,7 +814,7 @@ export async function sniperService() {
                       return;
                     }
                     
-                    const created_timestamp = txn.blockTime * 1000;
+                    const created_timestamp = txnBlockTime * 1000;
                     logger.info(`[🎯 NEW-TOKEN] ${shortMint} | Starting monitoring process | Created: ${new Date(created_timestamp).toISOString()}`);
                     
                     // Update buy monitor cycle from config
