@@ -690,7 +690,7 @@ export async function sniperService() {
             if (!isCommonError) {
               logger.error(`[❌ LOGS-ERROR] ${signature.slice(0, 8)}... | ${formatSolanaError(err)}`);
             }
-            return;
+            //return;
           }
           
           // Check if we've already processed this signature
