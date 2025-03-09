@@ -57,13 +57,13 @@ const startServer = () => {
     sniperService();
     
     // Choose the appropriate sell monitoring service based on configuration
-    if (USE_WSS) {
+    // if (USE_WSS) {
       logger.info("🌐 Using WebSocket-based token monitoring service");
       WssMonitorService.initialize();
-    } else {
-      logger.info("⏱️ Using interval-based token monitoring service");
-      sellMonitorService();
-    }
+    // } else {
+    //   logger.info("⏱️ Using interval-based token monitoring service");
+    //   sellMonitorService();
+    // }
   });
 };
 
