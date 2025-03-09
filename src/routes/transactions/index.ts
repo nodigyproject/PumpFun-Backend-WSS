@@ -13,7 +13,6 @@ const router = Router();
 router.get("/", async (req, res) => {
   try {
     // tx
-    console.log('FETCHING TRANSACTIONS')
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = parseInt(req.query.offset as string) || 0;
     const search = (req.query.search as string) || "";
