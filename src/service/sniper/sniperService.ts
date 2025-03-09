@@ -32,7 +32,7 @@ let BUY_MONITOR_CYCLE = SniperBotConfig.getBuyIntervalTime();
 const TX_FETCH_TIMEOUT = 7000;
 
 // Common Solana error codes and their meanings
-const ERROR_CODES = {
+const ERROR_CODES: Record<string, string> = {
   "Custom:3007": "Insufficient funds",
   "Custom:6001": "Invalid instruction data",
   "Custom:6002": "Invalid account data",
@@ -75,7 +75,8 @@ function formatSolanaError(error: any): string {
         const [index, errorDetail] = error.InstructionError;
         
         if (typeof errorDetail === 'string') {
-          return `Instruction ${index} failed: ${errorDetail} (${ERROR_CODES[errorDetail] || 'Unknown error'})`;
+          const errorKey = errorDetail as string;
+          return `Instruction ${index} failed: ${errorDetail} (${ERROR_CODES[errorKey] || 'Unknown error'})`;
         } else if (typeof errorDetail === 'object' && errorDetail.Custom !== undefined) {
           const errorCode = `Custom:${errorDetail.Custom}`;
           return `Instruction ${index} failed: Custom error ${errorDetail.Custom} (${ERROR_CODES[errorCode] || 'Unknown custom error'})`;
@@ -143,14 +144,32 @@ export const validateToken = async (mint: string, dev: PublicKey) => {
     const validationTime = Date.now() - validationStart;
     
     // Extract results from settled promises, handling failures gracefully
-    const pumpData = promiseResults[pumpid].status === 'fulfilled' ? promiseResults[pumpid].value : null;
-    const _devHolding = devHoldingId !== 0 && promiseResults[devHoldingId]?.status === 'fulfilled' ? 
-                       promiseResults[devHoldingId].value : 0;
-    const allAccounts = botBuyConfig.holders.enabled && promiseResults[allAccountsId]?.status === 'fulfilled' ? 
-                       promiseResults[allAccountsId].value : { length: 0 };
-    const dexData = (botBuyConfig.lastHourVolume.enabled || botBuyConfig.lastMinuteTxns.enabled) && 
-                    promiseResults[dexScreenerId]?.status === 'fulfilled' ? 
-                    promiseResults[dexScreenerId].value : null;
+    const pumpDataResult = promiseResults[pumpid];
+    const pumpData = pumpDataResult.status === 'fulfilled' ? pumpDataResult.value : null;
+
+    let _devHolding = 0;
+    if (devHoldingId !== 0) {
+      const devHoldingResult = promiseResults[devHoldingId];
+      if (devHoldingResult && devHoldingResult.status === 'fulfilled') {
+        _devHolding = devHoldingResult.value;
+      }
+    }
+
+    let allAccounts = { length: 0 };
+    if (botBuyConfig.holders.enabled) {
+      const allAccountsResult = promiseResults[allAccountsId];
+      if (allAccountsResult && allAccountsResult.status === 'fulfilled') {
+        allAccounts = allAccountsResult.value;
+      }
+    }
+
+    let dexData = null;
+    if (botBuyConfig.lastHourVolume.enabled || botBuyConfig.lastMinuteTxns.enabled) {
+      const dexDataResult = promiseResults[dexScreenerId];
+      if (dexDataResult && dexDataResult.status === 'fulfilled') {
+        dexData = dexDataResult.value;
+      }
+    }
 
     // If PumpData fetch failed, we can't proceed
     if (!pumpData) {
@@ -641,10 +660,22 @@ function isSignatureProcessed(signature: string): boolean {
 }
 
 /**
+ * Helper function to type cast transaction data
+ */
+interface ParsedTransaction {
+  transaction?: {
+    message?: {
+      instructions?: any[];
+    };
+  };
+  blockTime?: number;
+  meta?: any;
+}
+
+/**
  * Main sniper service function
  * Listens for new token creations and initiates monitoring
  */
-
 export async function sniperService() {
   logger.info(`${START_TXT.sniper} | Solana Pumpfun Sniper Bot started at ${new Date().toISOString()}`);
   logger.info(`[⚙️ CONFIG] Buy monitoring cycle: ${BUY_MONITOR_CYCLE/1000}s | Mode: ${USE_WSS ? 'WebSocket' : 'Interval'}-based monitoring`);
@@ -691,7 +722,7 @@ export async function sniperService() {
             logger.info(`[🔍 NEW-TOKEN] Detected new token creation: ${signature.slice(0, 8)}...`);
             
             // Get transaction details with timeout protection
-            const txn = await fetchTransactionWithTimeout(signature);
+            const txn = await fetchTransactionWithTimeout(signature) as ParsedTransaction;
 
             if (!txn) {
               logger.error(`[❌ TX-ERROR] Failed to get transaction details for ${signature.slice(0, 8)}...`);
@@ -730,20 +761,17 @@ export async function sniperService() {
               let virtualSolReserves = 30 * LAMPORTS_PER_SOL;
               let virtualTokenReserves = 1000000000 * 10 ** 6;
               
-              const txnBlockTime = txn.blockTime as number | undefined;
-              const txnMeta = txn.meta as any | undefined;
-              
-              if (txnBlockTime !== undefined && txnMeta) {
+              if (txn.blockTime !== undefined && txn.meta) {
                   try {
                     // Verify account indices exist in the transaction metadata
-                    if (!txnMeta.preBalances || !txnMeta.postBalances || 
-                        txnMeta.preBalances.length === 0 || txnMeta.postBalances.length === 0) {
+                    if (!txn.meta.preBalances || !txn.meta.postBalances || 
+                        txn.meta.preBalances.length === 0 || txn.meta.postBalances.length === 0) {
                       logger.error(`[❌ TX-DATA-ERROR] ${shortMint} | Transaction metadata missing balance information`);
                       return;
                     }
                     
                     const solSpent =
-                      Math.abs(txnMeta.postBalances[0] - txnMeta.preBalances[0]) /
+                      Math.abs(txn.meta.postBalances[0] - txn.meta.preBalances[0]) /
                       LAMPORTS_PER_SOL;
                       
                     logger.info(`[💰 DEV-SPEND] ${shortMint} | Developer spent: ${solSpent.toFixed(6)} SOL`);
@@ -814,7 +842,7 @@ export async function sniperService() {
                       return;
                     }
                     
-                    const created_timestamp = txnBlockTime * 1000;
+                    const created_timestamp = txn.blockTime * 1000;
                     logger.info(`[🎯 NEW-TOKEN] ${shortMint} | Starting monitoring process | Created: ${new Date(created_timestamp).toISOString()}`);
                     
                     // Update buy monitor cycle from config
