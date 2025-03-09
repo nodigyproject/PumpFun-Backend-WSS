@@ -88,8 +88,15 @@ export const tokenMonitorThread2Sell = async (mint: string, buyTxInfo?: Partial<
       logger.info(`[💾 USING-DB-DATA] ${shortMint} | Found transaction data in database`);
     }
 
-    const investedPrice_usd = Number(buyTx.swapPrice_usd);
-    const investedAmount = Number(buyTx.swapAmount) * 10 ** TOKEN_DECIMALS;
+    // Check if buyTx is undefined before using it
+    if (!buyTx) {
+      logger.warn(`[❌ ERROR] Invalid buy transaction data for token ${shortMint}`);
+      tokenSellingStep.delete(mint);
+      return;
+    }
+
+    const investedPrice_usd = Number(buyTx.swapPrice_usd || 0);
+    const investedAmount = Number(buyTx.swapAmount || 0) * 10 ** TOKEN_DECIMALS;
     
     if (!investedPrice_usd) {
       logger.warn(`[❌ ERROR] Invalid invested price for token ${shortMint}`);
