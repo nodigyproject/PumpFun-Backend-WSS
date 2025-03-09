@@ -37,11 +37,9 @@ const tokenPriceData: Map<string, PriceData> = new Map();
 // New map to track pending transactions
 const pendingTransactions: Map<string, PendingTransaction[]> = new Map();
 // New map to track cooldown periods
-const sellCooldowns: Map<string, number> = new Map();
 // New map to track active sell operations (global lock)
 const tokenSellingLock: Map<string, boolean> = new Map();
 // New map for unified evaluation queue
-const evaluationQueue: Map<string, NodeJS.Timeout> = new Map();
 
 // Helper function to format time elapsed
 function formatTimeElapsed(ms: number): string {
@@ -117,26 +115,7 @@ export class WssMonitorService {
     this.activeOperationCount = Math.max(0, this.activeOperationCount - 1);
   }
   
-  /**
-   * Queue an evaluation function with unified debouncing
-   */
-  private static queueEvaluation(mintAddress: string, evaluationFn: Function): void {
-    const shortMint = getTokenShortName(mintAddress);
-    
-    // Clear any existing evaluation in the queue
-    if (evaluationQueue.has(mintAddress)) {
-      clearTimeout(evaluationQueue.get(mintAddress)!);
-      logger.info(`[⏱️ QUEUE] ${shortMint} | Replaced queued evaluation`);
-    }
-    
-    // Add new evaluation to the queue with debounce
-    evaluationQueue.set(mintAddress, setTimeout(() => {
-      logger.info(`[⏱️ QUEUE] ${shortMint} | Processing queued evaluation`);
-      evaluationFn();
-      evaluationQueue.delete(mintAddress);
-    }, 2000)); // 2 second unified debounce
-  }
-
+ 
   /**
    * Initialize the WebSocket monitoring service
    */
@@ -148,9 +127,7 @@ export class WssMonitorService {
     
     // Initialize maps
     pendingTransactions.clear();
-    sellCooldowns.clear();
     tokenSellingLock.clear();
-    evaluationQueue.clear();
     
     // Initial sync of monitored tokens
     this.syncMonitoredTokens();
@@ -207,26 +184,20 @@ export class WssMonitorService {
             }
             
             // Check if there's an active cooldown
-            const cooldownUntil = sellCooldowns.get(mintAddress) || 0;
-            if (Date.now() < cooldownUntil) {
-              // Skip this token until cooldown expires
-              continue;
-            }
+          
             
             // Queue the evaluation instead of running it directly
-            this.queueEvaluation(mintAddress, async () => {
-              try {
-                const tokenData = await getTokenDataforAssets(mintAddress);
-                const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
-                
-                if (tokenData && currentPrice_usd > 0) {
-                  // Check if duration has elapsed and evaluate sell conditions
-                  await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
-                }
-              } catch (error) {
-                logger.error(`[❌ ACTIVE-EVAL-ERROR] Error in queued evaluation for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+            try {
+              const tokenData = await getTokenDataforAssets(mintAddress);
+              const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+              
+              if (tokenData && currentPrice_usd > 0) {
+                // Check if duration has elapsed and evaluate sell conditions
+                await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
               }
-            });
+            } catch (error) {
+              logger.error(`[❌ ACTIVE-EVAL-ERROR] Error in evaluation for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+            }
           } catch (tokenError) {
             logger.error(`[❌ ACTIVE-CHECK-ERROR] Error checking token ${shortMint}: ${tokenError instanceof Error ? tokenError.message : String(tokenError)}`);
           }
@@ -508,13 +479,7 @@ export class WssMonitorService {
         // Log lock status
         const lockStatus = tokenSellingLock.get(mintAddress) ? ' | 🔒 LOCKED' : '';
         
-        // Log cooldown status
-        const cooldownUntil = sellCooldowns.get(mintAddress) || 0;
-        const cooldownInfo = Date.now() < cooldownUntil ? 
-          ` | ⏳ Cooldown: ${formatTimeElapsed(cooldownUntil - Date.now())}` : '';
-        
-        logger.info(`[📈 STATUS] ${shortMint} | Age: ${ageFormatted} | Price: $${currentPrice_usd.toFixed(6)} (${priceChangePercent > 0 ? "+" : ""}${priceChangePercent.toFixed(2)}%) | MC: $${mcUsd.toFixed(2)}${pendingInfo}${lockStatus}${cooldownInfo}`);
-        
+   
         // Log price monitor status if available
         const status = this.getPriceMonitorStatus(mintAddress);
         if (status) {
@@ -580,7 +545,6 @@ export class WssMonitorService {
     logger.info(`[📝 PENDING-ADD] ${shortMint} | Added ${isSimulating ? 'simulating ' : ''}transaction to pending list: ${txHash.slice(0, 8)}... | Total: ${pending.length}`);
     
     // Set a cooldown to prevent rapid subsequent sell attempts
-    sellCooldowns.set(mintAddress, Date.now() + (isSimulating ? this.FAILED_TX_COOLDOWN_MS : this.COOLDOWN_AFTER_SELL_MS));
   }
 
   /**
@@ -690,40 +654,31 @@ export class WssMonitorService {
     try {
       logger.info(`[⚡ EVENT] Detected pool change for token ${shortMint}, evaluating...`);
       
-      // Queue evaluation instead of using debounce timer
-      this.queueEvaluation(mintAddress, async () => {
-        try {
-          // Check if there's an active lock
-          if (tokenSellingLock.get(mintAddress)) {
-            logger.info(`[🔒 POOL-EVENT] ${shortMint} | Skipping evaluation due to active lock`);
-            return;
-          }
-          
-          // Clean up any expired transactions
-          this.cleanupExpiredTransactions(mintAddress);
-          
-          // Check cooldown period
-          const cooldownUntil = sellCooldowns.get(mintAddress) || 0;
-          if (Date.now() < cooldownUntil) {
-            logger.info(`[⏳ COOLDOWN] ${shortMint} | Skipping evaluation during cooldown period (${formatTimeElapsed(cooldownUntil - Date.now())} remaining)`);
-            return;
-          }
-          
-          // Get current token data and price
-          const tokenData = await getTokenDataforAssets(mintAddress);
-          const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
-          
-          if (!currentPrice_usd || currentPrice_usd === 0) {
-            logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
-            return;
-          }
-          
-          // Check if we should sell based on price changes
-          await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
-        } catch (error) {
-          logger.error(`[❌ POOL-EVENT-ERROR] Error in pool change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+      // With direct evaluation:
+      try {
+        // Check if there's an active lock
+        if (tokenSellingLock.get(mintAddress)) {
+          logger.info(`[🔒 POOL-EVENT] ${shortMint} | Skipping evaluation due to active lock`);
+          return;
         }
-      });
+        
+        // Clean up any expired transactions
+        this.cleanupExpiredTransactions(mintAddress);
+        
+        // Get current token data and price
+        const tokenData = await getTokenDataforAssets(mintAddress);
+        const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+        
+        if (!currentPrice_usd || currentPrice_usd === 0) {
+          logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
+          return;
+        }
+        
+        // Check if we should sell based on price changes
+        await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
+      } catch (error) {
+        logger.error(`[❌ POOL-EVENT-ERROR] Error in pool change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     } catch (error) {
       logger.error(`[❌ EVENT-ERROR] Error handling account change for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -742,39 +697,29 @@ export class WssMonitorService {
     try {
       logger.info(`[⚡ EVENT] Detected token program change for ${shortMint}, evaluating...`);
       
-      // Queue evaluation instead of using debounce timer
-      this.queueEvaluation(mintAddress, async () => {
-        try {
-          // Check if there's an active lock
-          if (tokenSellingLock.get(mintAddress)) {
-            logger.info(`[🔒 TOKEN-EVENT] ${shortMint} | Skipping evaluation due to active lock`);
-            return;
-          }
-          
-          // Clean up any expired transactions
-          this.cleanupExpiredTransactions(mintAddress);
-          
-          // Check cooldown period
-          const cooldownUntil = sellCooldowns.get(mintAddress) || 0;
-          if (Date.now() < cooldownUntil) {
-            logger.info(`[⏳ COOLDOWN] ${shortMint} | Skipping evaluation during cooldown period (${formatTimeElapsed(cooldownUntil - Date.now())} remaining)`);
-            return;
-          }
-          
-          // Get current token data and price
-          const tokenData = await getTokenDataforAssets(mintAddress);
-          const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
-          
-          if (!currentPrice_usd || currentPrice_usd === 0) {
-            logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
-            return;
-          }
-          
-          await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
-        } catch (error) {
-          logger.error(`[❌ TOKEN-EVENT-ERROR] Error in token program change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+      try {
+        // Check if there's an active lock
+        if (tokenSellingLock.get(mintAddress)) {
+          logger.info(`[🔒 TOKEN-EVENT] ${shortMint} | Skipping evaluation due to active lock`);
+          return;
         }
-      });
+        
+        // Clean up any expired transactions
+        this.cleanupExpiredTransactions(mintAddress);
+        
+        // Get current token data and price
+        const tokenData = await getTokenDataforAssets(mintAddress);
+        const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+        
+        if (!currentPrice_usd || currentPrice_usd === 0) {
+          logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
+          return;
+        }
+        
+        await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
+      } catch (error) {
+        logger.error(`[❌ TOKEN-EVENT-ERROR] Error in token program change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     } catch (error) {
       logger.error(`[❌ EVENT-ERROR] Error handling token program change for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -817,12 +762,7 @@ export class WssMonitorService {
         return;
       }
       
-      // Second check - are we in cooldown?
-      const cooldownUntil = sellCooldowns.get(mintAddress) || 0;
-      if (Date.now() < cooldownUntil) {
-        logger.info(`[⏳ COOLDOWN] ${shortMint} | Evaluation skipped due to cooldown (${formatTimeElapsed(cooldownUntil - Date.now())} remaining)`);
-        return;
-      }
+      
       
       // Third check - do we have pending transactions?
       if (this.hasPendingTransaction(mintAddress)) {
@@ -890,11 +830,9 @@ export class WssMonitorService {
               );
               
               logger.error(`[❌ SELL-ERROR] ${shortMint} | Failed to sell tokens due to insufficient growth`);
-              sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
             }
           } catch (error) {
             logger.error(`[❌ SELL-ERROR] ${shortMint} | Error during price stagnation sell: ${error instanceof Error ? error.message : String(error)}`);
-            sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
           } finally {
             this.releaseLock(mintAddress);
           }
@@ -934,11 +872,9 @@ export class WssMonitorService {
               );
               
               logger.error(`[❌ SELL-ERROR] ${shortMint} | Failed to sell tokens with low MC`);
-              sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
             }
           } catch (error) {
             logger.error(`[❌ SELL-ERROR] ${shortMint} | Error during low MC sell: ${error instanceof Error ? error.message : String(error)}`);
-            sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
           } finally {
             this.releaseLock(mintAddress);
           }
@@ -974,11 +910,9 @@ export class WssMonitorService {
               );
               
               logger.error(`[❌ SELL-ERROR] ${shortMint} | Failed to sell on stop loss`);
-              sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
             }
           } catch (error) {
             logger.error(`[❌ SELL-ERROR] ${shortMint} | Error during stop loss sell: ${error instanceof Error ? error.message : String(error)}`);
-            sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
           } finally {
             this.releaseLock(mintAddress);
           }
@@ -1056,11 +990,9 @@ export class WssMonitorService {
                 );
                 
                 logger.error(`[❌ SELL-ERROR] ${shortMint} | Failed to execute step ${checkStep + 1} sell`);
-                sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
               }
             } catch (error) {
               logger.error(`[❌ SELL-ERROR] ${shortMint} | Error during step ${checkStep + 1} sell: ${error instanceof Error ? error.message : String(error)}`);
-              sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
             } finally {
               this.releaseLock(mintAddress);
             }
@@ -1115,7 +1047,6 @@ export class WssMonitorService {
         logger.error(`[❌ TX-FAILED] ${shortMint} | Transaction ${txHash.slice(0, 8)}... failed`);
         
         // Add a cooldown after failed transaction to prevent rapid retries
-        sellCooldowns.set(mintAddress, Date.now() + this.FAILED_TX_COOLDOWN_MS);
       }
       
       // Remove the transaction from pending list
@@ -1150,14 +1081,9 @@ export class WssMonitorService {
         this.debounceTimers.delete(mintAddress);
       }
       
-      // Clear evaluation queue item
-      if (evaluationQueue.has(mintAddress)) {
-        clearTimeout(evaluationQueue.get(mintAddress)!);
-        evaluationQueue.delete(mintAddress);
-      }
+   
       
       // Clear cooldown
-      sellCooldowns.delete(mintAddress);
       
       // Clear pending transactions
       pendingTransactions.delete(mintAddress);
@@ -1211,14 +1137,9 @@ export class WssMonitorService {
       }
       this.debounceTimers.clear();
       
-      // Clear all evaluation queue items
-      for (const [mintAddress, timer] of evaluationQueue.entries()) {
-        clearTimeout(timer);
-      }
-      evaluationQueue.clear();
+     
       
       // Clear all cooldowns, pending transactions and locks
-      sellCooldowns.clear();
       pendingTransactions.clear();
       tokenSellingLock.clear();
       
