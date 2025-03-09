@@ -326,7 +326,7 @@ export const swap = async (
           closeAccountTxHash // Include close account txn hash if available
         };
       } catch (error: any) {
-        logger.error(`[❌ EXECUTION-ERROR] ${shortMint} | Transaction execution failed: ${error.message}`);
+        logger.error(`[❌ EXECUTION-ERROR] ${shortMint} | Transaction execution failed: ${JSON.stringify(error.message)}`);
         return null;
       }
     }

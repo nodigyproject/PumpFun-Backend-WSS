@@ -65,6 +65,7 @@ export const removeTokenBuyingMap = (value: string) => {
  * @returns Formatted error message
  */
 function formatSolanaError(error: any): string {
+  console.log(JSON.stringify(error))
   try {
     if (typeof error === 'string') {
       return error;
@@ -688,7 +689,7 @@ export async function sniperService() {
                                   errorString.includes("Custom:6005");
             
             if (!isCommonError) {
-              logger.error(`[❌ LOGS-ERROR] ${signature.slice(0, 8)}... | ${formatSolanaError(err)}`);
+              logger.error(`[❌ LOGS-ERROR] ${signature} | ${formatSolanaError(err)}`);
             }
             //return;
           }
