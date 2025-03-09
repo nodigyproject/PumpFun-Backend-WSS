@@ -512,7 +512,7 @@ export async function sniperService() {
       async ({ logs, err, signature }) => {
         try {
           if (err) {
-            logger.error(`[❌ LOGS-ERROR] Error in onLogs handler: ${err}`);
+            logger.error(`[❌ LOGS-ERROR] Error in onLogs handler: ${JSON.stringify(err)}`);
             return;
           }
 
