@@ -70,7 +70,6 @@ export class WssMonitorService {
   private static readonly COOLDOWN_AFTER_SELL_MS: number = 5000; // Increased from 3000 to 5000ms
   private static readonly GLOBAL_LOCK_TIMEOUT_MS: number = 15000; // 15 second lock timeout
   private static readonly FAILED_TX_COOLDOWN_MS: number = 3000; // 3 second cooldown after failed tx
-  private static debounceTimers: Map<string, NodeJS.Timeout> = new Map();
   private static readonly MAX_CONCURRENT_OPERATIONS = 3;
   private static activeOperationCount = 0;
   private static memoryMonitorInterval: NodeJS.Timeout | null = null;
@@ -1075,11 +1074,7 @@ export class WssMonitorService {
         tokenPriceData.delete(mintAddress);
       }
       
-      // Clear debounce timer
-      if (this.debounceTimers.has(mintAddress)) {
-        clearTimeout(this.debounceTimers.get(mintAddress)!);
-        this.debounceTimers.delete(mintAddress);
-      }
+      
       
    
       
@@ -1131,11 +1126,7 @@ export class WssMonitorService {
         this.activeMonitorInterval = null;
       }
       
-      // Clear all debounce timers
-      for (const [mintAddress, timer] of this.debounceTimers.entries()) {
-        clearTimeout(timer);
-      }
-      this.debounceTimers.clear();
+    
       
      
       
