@@ -540,30 +540,54 @@ const monitorToken = async (
           return;
         }
 
+        // Execute swap
         logger.info(`[🔄 SWAP-EXECUTE] ${shortMint} | Executing swap...`);
-      const swapResult = await swap(swapParam);
-
-      if (swapResult) {
-        const { txHash, price, inAmount, outAmount } = swapResult;
-        logger.info(`[✅ SWAP-SUCCESS] ${shortMint} | Transaction sent: ${txHash?.slice(0, 8)}...`);
+        const swapResult = await swap(swapParam);
         
-        // Get SOL price for fee calculation
-        const solPrice = getCachedSolPrice();
-        
-        // Prepare monitoring data and START MONITORING IMMEDIATELY
-        const monitoringData = prepareBuyMonitoringData(mint, outAmount, price);
-        
-        logger.info(`[🔄 EARLY-HANDOFF] ${shortMint} | Starting monitoring immediately (before confirmation)`);
-        try {
-          if (USE_WSS) {
-            logger.info(`[🔌 WSS-MONITOR] ${shortMint} | Starting WebSocket monitoring with direct data handoff`);
-            await WssMonitorService.startMonitoringWithData(mint, monitoringData.buyTxInfo);
-            
-            const monitorDelay = Date.now() - monitoringData.created_timestamp;
-            logger.trackBuyToMonitorDelay(mint, monitoringData.created_timestamp, Date.now());
-            logger.info(`[✅ MONITOR-INIT] ${shortMint} | WebSocket monitoring started in ${monitorDelay}ms`);
-          } else {
-  
+        if (swapResult) {
+          const { txHash, price, inAmount, outAmount } = swapResult;
+          logger.info(`[✅ SWAP-SUCCESS] ${shortMint} | Transaction successful: ${txHash?.slice(0, 8)}...`);
+          logger.info(`[📊 SWAP-DETAILS] ${shortMint} | Price: $${price?.toFixed(6)}, In: ${inAmount?.toFixed(6)} SOL, Out: ${outAmount?.toFixed(6)} tokens`);
+          
+          // Get SOL price for fee calculation
+          const solPrice = getCachedSolPrice();
+          
+          // Prepare transaction data
+          const save_data: ITxntmpData = {
+            isAlert: false,
+            txHash: txHash || "",
+            mint: mint,
+            swap: "BUY",
+            swapPrice_usd: price,
+            swapAmount: outAmount,
+            swapFee_usd: tip_sol * solPrice,
+            swapProfit_usd: 0,
+            swapProfitPercent_usd: 0,
+            dex: "Pumpfun",
+          };
+          
+          // Prepare monitoring data before saving to database
+          const monitoringData = prepareBuyMonitoringData(mint, outAmount, price);
+          
+          // Save transaction to database (don't await)
+          logger.info(`[💾 DB-SAVE] ${shortMint} | Saving transaction to database...`);
+          saveTXonDB(save_data).catch(dbError => {
+            logger.error(`[❌ DB-ERROR] ${shortMint} | Failed to save transaction: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+          });
+          
+          // IMMEDIATE HANDOFF TO MONITORING - Crucial part that ensures we start monitoring right away
+          logger.info(`[🔄 HANDOFF] ${shortMint} | Initiating immediate sell monitoring`);
+          
+          try {
+            if (USE_WSS) {
+              // Start WebSocket monitoring for this token with buyTx data
+              logger.info(`[🔌 WSS-MONITOR] ${shortMint} | Starting WebSocket monitoring with direct data handoff`);
+              await WssMonitorService.startMonitoringWithData(mint, monitoringData.buyTxInfo);
+              
+              const monitorDelay = Date.now() - monitoringData.created_timestamp;
+              logger.trackBuyToMonitorDelay(mint, monitoringData.created_timestamp, Date.now());
+              logger.info(`[✅ MONITOR-INIT] ${shortMint} | WebSocket monitoring started in ${monitorDelay}ms`);
+            } else {
               // Start interval-based monitoring for this token with buyTx data
               logger.info(`[⏱️ INTERVAL-MONITOR] ${shortMint} | Starting interval monitoring with direct data handoff`);
               await tokenMonitorThread2Sell(mint, monitoringData.buyTxInfo);
@@ -665,7 +689,7 @@ export async function sniperService() {
                                   errorString.includes("Custom:6005");
             
             if (!isCommonError) {
-              //logger.error(`[❌ LOGS-ERROR] ${signature} | ${formatSolanaError(err)}`);
+              logger.error(`[❌ LOGS-ERROR] ${signature} | ${formatSolanaError(err)}`);
             }
             //return;
           }
