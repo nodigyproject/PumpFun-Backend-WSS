@@ -495,7 +495,7 @@ export class WssMonitorService {
     const priceData = tokenPriceData.get(mintAddress);
     
     if (!priceData) {
-      logger.warn(`[⚠️ NO-PRICE-DATA] ${shortMint} | No price data found for evaluation`);
+      //logger.warn(`[⚠️ NO-PRICE-DATA] ${shortMint} | No price data found for evaluation`);
       return false;
     }
     
@@ -870,7 +870,7 @@ export class WssMonitorService {
       } else {
         // Fall back to token data from assets service
         investedPrice_usd = tokenData.investedPrice_usd || 0;
-        logger.info(`[💾 USING-ASSET-DATA] ${shortMint} | Using price from asset service: $${investedPrice_usd.toFixed(6)}`);
+        //logger.info(`[💾 USING-ASSET-DATA] ${shortMint} | Using price from asset service: $${investedPrice_usd.toFixed(6)}`);
       }
       
       if (investedPrice_usd === 0) {
