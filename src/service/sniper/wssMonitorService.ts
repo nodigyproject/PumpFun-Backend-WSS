@@ -64,6 +64,8 @@ export class WssMonitorService {
   private static syncInterval: NodeJS.Timeout | null = null;
   private static activeMonitorInterval: NodeJS.Timeout | null = null;
   private static memoryMonitorInterval: NodeJS.Timeout | null = null;
+  private static transactionInProgress: Map<string, boolean> = new Map();
+
 
   // REMOVED: All lock-related methods and properties
 
@@ -121,35 +123,37 @@ export class WssMonitorService {
     
     logger.info(`[⏱️ ACTIVE-MONITOR] Starting frequent price checks every 1 second (no locks)`);
     
+    // In startActiveMonitoring method around line 124
     this.activeMonitorInterval = setInterval(async () => {
       try {
-        // Check all monitored tokens
-        for (const [mintAddress, _] of this.monitoredTokens) {
-          const shortMint = getTokenShortName(mintAddress);
-          
+        // Sort monitored tokens by creation time (newest first)
+        const sortedTokens = Array.from(this.monitoredTokens.entries())
+          .map(([mint, pubkey]) => ({
+            mint,
+            pubkey,
+            createdTime: tokenCreatedTime.get(mint) || 0
+          }))
+          .sort((a, b) => b.createdTime - a.createdTime); // Newest first
+        
+        // Process newest tokens first (particularly important for those < 30s old)
+        for (const token of sortedTokens) {
           try {
-            // REMOVED: Check for active lock - always proceed with evaluation
+            if (this.isTransactionInProgress(token.mint)) continue;
             
-            // Direct evaluation without queuing or debouncing
-            try {
-              const tokenData = await getTokenDataforAssets(mintAddress);
-              const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
-              
-              if (tokenData && currentPrice_usd > 0) {
-                // Check if duration has elapsed and evaluate sell conditions
-                await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
-              }
-            } catch (error) {
-              logger.error(`[❌ ACTIVE-EVAL-ERROR] Error in evaluation for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+            const tokenData = await getTokenDataforAssets(token.mint);
+            const { price: currentPrice_usd } = await getPumpTokenPriceUSD(token.mint);
+            
+            if (tokenData && currentPrice_usd > 0) {
+              await this.evaluateSellConditions(token.mint, tokenData, currentPrice_usd);
             }
-          } catch (tokenError) {
-            logger.error(`[❌ ACTIVE-CHECK-ERROR] Error checking token ${shortMint}: ${tokenError instanceof Error ? tokenError.message : String(tokenError)}`);
+          } catch (error) {
+            logger.error(`[❌ TOKEN-ERROR] Error processing ${token.mint}: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
       } catch (error) {
-        logger.error(`[❌ ACTIVE-MONITOR-ERROR] Error in active monitoring loop: ${error instanceof Error ? error.message : String(error)}`);
+        logger.error(`[❌ MONITOR-ERROR] ${error instanceof Error ? error.message : String(error)}`);
       }
-    }, 1000); // Check every 1 second (more aggressive monitoring)
+    }, 250);
   }
 
   /**
@@ -364,7 +368,7 @@ export class WssMonitorService {
         const botSellConfig = SniperBotConfig.getSellConfig();
         const durationSec = typeof botSellConfig.mcChange?.duration === 'number' ? 
           (botSellConfig.mcChange.duration > 1000 ? botSellConfig.mcChange.duration / 1000 : botSellConfig.mcChange.duration) : 
-          10; // Default to 10 seconds if undefined
+          2; // Default to 10 seconds if undefined
         
         const percentValue = typeof botSellConfig.mcChange?.percentValue === 'number' ? 
           botSellConfig.mcChange.percentValue : 25; // Default to 25% if undefined
@@ -711,6 +715,20 @@ export class WssMonitorService {
     }
   }
 
+  private static setTransactionInProgress(mintAddress: string, inProgress: boolean): void {
+    const shortMint = getTokenShortName(mintAddress);
+    this.transactionInProgress.set(mintAddress, inProgress);
+    if (inProgress) {
+      logger.info(`[🔒 LOCK] ${shortMint} | Transaction processing locked`);
+    } else {
+      logger.info(`[🔓 UNLOCK] ${shortMint} | Transaction processing unlocked`);
+    }
+  }
+  
+  private static isTransactionInProgress(mintAddress: string): boolean {
+    return this.transactionInProgress.get(mintAddress) === true;
+  }
+
   /**
    * Handle changes in liquidity pool account
    */
@@ -822,9 +840,11 @@ export class WssMonitorService {
     const botSellConfig = SniperBotConfig.getSellConfig();
     
     try {
-      // REMOVED: First check for active lock - always proceed with evaluation
+      if (this.isTransactionInProgress(mintAddress)) {
+        logger.info(`[🔒 LOCKED] ${shortMint} | Transaction already in progress, skipping evaluation`);
+        return;
+      }
       
-      // REMOVED: Check for pending transactions - we want to sell aggressively now
       
       if (!tokenData || tokenData.currentAmount <= 0) {
         logger.info(`[🚫 ZERO] ${shortMint} | Current token amount is zero, stopping monitor`);
@@ -866,6 +886,8 @@ export class WssMonitorService {
         logger.info(`[💰 SELL-SIGNAL] ${shortMint} | Selling due to insufficient price growth | Price: $${currentPrice_usd.toFixed(6)} (${raisePercent > 0 ? "+" : ""}${raisePercent.toFixed(2)}%)`);
         
         try {
+          this.setTransactionInProgress(mintAddress, true);
+
           const txResult = await sellTokenSwap(mintAddress, curTokenAmount, true, false);
           if (txResult) {
             // Add to pending transactions if valid hash returned
@@ -1028,6 +1050,9 @@ export class WssMonitorService {
     const shortMint = getTokenShortName(mintAddress);
     
     try {
+      this.setTransactionInProgress(mintAddress, false);
+      logger.info(`[✅ UNLOCKED] ${shortMint} `);
+
       // Find the pending transaction
       const pending = pendingTransactions.get(mintAddress) || [];
       const transaction = pending.find(tx => tx.txHash === txHash);

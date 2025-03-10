@@ -250,7 +250,7 @@ export const pumpfunSwap = async (
             units: 100000
           }),
           ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: 300000
+            microLamports: 1000000
           }),
           spl.createAssociatedTokenAccountIdempotentInstruction(
             wallet.publicKey,
@@ -283,7 +283,7 @@ export const pumpfunSwap = async (
             units: 100000
           }),
           ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: 300000
+            microLamports: 1000000
           }),
           spl.createAssociatedTokenAccountIdempotentInstruction(
             wallet.publicKey,

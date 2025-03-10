@@ -273,7 +273,7 @@ export const sellTokenSwap = async (mint: string, amount: number, isAlert: boole
     logger.info(`[📈 PRICE-INFO] ${shortMint} | Current price: $${currentPrice_usd.toFixed(6)} | Exchange: ${isRaydium ? "Raydium" : "Pumpfun"}`);
     
     // Adjust tip amount based on isSellAll
-    const tipAmount = isSellAll ? 0.00001 : botBuyConfig.jitoTipAmount;
+    const tipAmount = isSellAll ? 0.00001 : botBuyConfig.jitoTipAmount * 2;
     logger.info(`[💵 FEE-INFO] ${shortMint} | Using tip amount: ${tipAmount} SOL`);
     
     // Create swap parameters
