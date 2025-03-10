@@ -208,11 +208,11 @@ export const pumpfunSwap = async (
         );
         
         // Check if output is reasonable - this affects whether we can safely close the account
-        if (minSolOutput < MIN_TOKEN_AMOUNT) {
-          logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Calculated minSolOutput (${minSolOutput}) is too small`);
-          safeToCloseAccount = false;
-          return null;
-        }
+        // if (minSolOutput < MIN_TOKEN_AMOUNT) {
+        //   logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Calculated minSolOutput (${minSolOutput}) is too small`);
+        //   safeToCloseAccount = false;
+        //   return null;
+        // }
         
         // Check if the output seems unusually small relative to input (might indicate an issue)
         const outputRatio = minSolOutput / amountInLamports;
