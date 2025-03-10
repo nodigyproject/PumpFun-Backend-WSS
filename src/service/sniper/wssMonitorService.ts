@@ -847,14 +847,14 @@ export class WssMonitorService {
       
       
       if (!tokenData || tokenData.currentAmount <= 0) {
-        logger.info(`[🚫 ZERO] ${shortMint} | Current token amount is zero, stopping monitor`);
+        //logger.info(`[🚫 ZERO] ${shortMint} | Current token amount is zero, stopping monitor`);
         this.stopMonitoring(mintAddress);
         return;
       }
 
       const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mintAddress);
       if (curTokenAmount === 0) {
-        logger.info(`[🚫 ZERO] ${shortMint} | Current token amount is zero, stopping monitor`);
+        //logger.info(`[🚫 ZERO] ${shortMint} | Current token amount is zero, stopping monitor`);
         this.stopMonitoring(mintAddress);
         return;
       }

@@ -144,7 +144,7 @@ export const tokenMonitorThread2Sell = async (mint: string, buyTxInfo?: Partial<
           const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mint);
           
           if (curTokenAmount === 0) {
-            logger.info(`[🚫 ZERO] ${shortMint} | Current token amount is zero, stopping monitor`);
+            //logger.info(`[🚫 ZERO] ${shortMint} | Current token amount is zero, stopping monitor`);
             tokenSellingStep.delete(mint);
             priceMonitors.delete(mint);
             directBuyData.delete(mint);
