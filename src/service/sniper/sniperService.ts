@@ -769,7 +769,7 @@ export async function sniperService() {
                       maxDevBuyAmount.enabled &&
                       solSpent > maxDevBuyAmount.value
                     ) {
-                      logger.info(`[❌ DEV-SPEND-HIGH] ${shortMint} | Developer spent too much: ${solSpent.toFixed(6)} SOL > limit ${maxDevBuyAmount.value} SOL`);
+                      logger.info(`[❌ DEV-SPEND-HIGH] ${shortMint} | REJECTED: Developer spent ${solSpent.toFixed(6)} SOL > limit ${maxDevBuyAmount.value} SOL`);
                       return;
                     }
 
@@ -786,7 +786,9 @@ export async function sniperService() {
                     virtualTokenReserves -= solSpent * 10 ** 6 / price;
                     virtualSolReserves += solSpent * LAMPORTS_PER_SOL;
                     
-                    logger.info(`[💰 INITIAL-PRICE] ${shortMint} | Initial price: $${price.toFixed(6)}, SOL Price: $${cachedSolPrice.toFixed(2)}`);
+                    // Log initial price and important metrics
+                    logger.info(`[💰 PRICE-INFO] ${shortMint} | Initial price: $${price.toFixed(6)}, SOL Price: $${cachedSolPrice.toFixed(2)}`);
+                    logger.info(`[📊 RESERVES] ${shortMint} | Virtual SOL: ${(virtualSolReserves/LAMPORTS_PER_SOL).toFixed(2)} SOL, Virtual tokens: ${(virtualTokenReserves/10**6).toFixed(2)}M`);
 
                     // Create pumpData object for monitoring
                     const pumpData: PumpData = {
@@ -807,30 +809,33 @@ export async function sniperService() {
                     try {
                       if (SniperBotConfig.getBuyConfig().duplicates.enabled === true) {
                         isDuplicated = await checkDuplicates(mint.toBase58());
+                        if (isDuplicated) {
+                          logger.info(`[❌ DUPLICATE] ${shortMint} | REJECTED: Duplicate token found`);
+                          return;
+                        }
                       } else {
-                        // Still add to database, but don't filter
-                        checkDuplicates(mint.toBase58()).catch(err => {
-                          logger.error(`[❌ DB-ERROR] ${shortMint} | Error saving token to database: ${err.message}`);
-                        });
+                        // Still log that we're not checking for duplicates
+                        logger.info(`[ℹ️ DUPLICATE-CHECK] ${shortMint} | Duplicate check is disabled, proceeding without checking`);
                       }
                     } catch (dupError) {
                       logger.error(`[❌ DUPLICATE-ERROR] ${shortMint} | Error checking for duplicates: ${dupError instanceof Error ? dupError.message : String(dupError)}`);
                       // Continue processing even if duplicate check fails
                     }
                     
-                    if (isDuplicated) {
-                      logger.info(`[❌ DUPLICATE] ${shortMint} | Duplicate token found, skipping`);
+                    // Check if bot is running
+                    if (!isRunning()) {
+                      logger.info(`[🛑 NOT-RUNNING] ${shortMint} | REJECTED: Bot is not currently running`);
                       return;
                     }
                     
-                    // Check if bot is running
-                    if (!isRunning() || !isWorkingTime()) {
-                      logger.info(`[🛑 NOT-RUNNING] ${shortMint} | Bot not running or outside working hours. isRunning=${isRunning()}, isWorkingTime=${isWorkingTime()}`);
+                    if (!isWorkingTime()) {
+                      logger.info(`[🛑 OUTSIDE-HOURS] ${shortMint} | REJECTED: Outside configured working hours`);
                       return;
                     }
                     
                     const created_timestamp = txn.blockTime * 1000;
-                    logger.info(`[🎯 NEW-TOKEN] ${shortMint} | Starting monitoring process | Created: ${new Date(created_timestamp).toISOString()}`);
+                    const tokenAge = now - created_timestamp;
+                    logger.info(`[🎯 TOKEN-AGE] ${shortMint} | Token age: ${(tokenAge/1000).toFixed(2)}s | Created: ${new Date(created_timestamp).toISOString()}`);
                     
                     // Update buy monitor cycle from config
                     BUY_MONITOR_CYCLE = SniperBotConfig.getBuyIntervalTime();
@@ -839,6 +844,7 @@ export async function sniperService() {
                     if (tokenBuyingMap.has(mint.toBase58())) {
                       logger.info(`[⚠️ ALREADY-MONITORING] ${shortMint} | Token is already being monitored, skipping`);
                     } else {
+                      logger.info(`[✅ MONITORING-STARTED] ${shortMint} | Starting token monitoring with buy strategy: ${SniperBotConfig.getBuyStrategy()}`);
                       monitorToken(mint.toBase58(), pumpData, user, created_timestamp);
                     }
                   } catch (dataError) {
@@ -862,6 +868,7 @@ export async function sniperService() {
     );
     
     logger.info(`[🔌 CONNECTED] Sniper service successfully connected to Solana network`);
+    logger.info(`[📊 STATUS] SOL price: $${getCachedSolPrice().toFixed(2)}, Bot status: ${isRunning() ? 'Running' : 'Paused'}, Working hours: ${isWorkingTime() ? 'Active' : 'Inactive'}`);
     
     // Periodically clean up processed signatures to prevent memory leaks
     setInterval(() => {
@@ -873,6 +880,12 @@ export async function sniperService() {
         logger.info(`[🧹 CLEANUP] Reduced processed signatures to ${processedSignatures.size}`);
       }
     }, 30 * 60 * 1000); // Clean up every 30 minutes
+    
+    // Add periodic status logging
+    setInterval(() => {
+      const activeBuys = tokenBuyingMap.size;
+      logger.info(`[📊 STATUS-CHECK] Actively monitored tokens: ${activeBuys}, SOL price: $${getCachedSolPrice().toFixed(2)}`);
+    }, 15 * 60 * 1000); // Log status every 15 minutes
     
   } catch (e: any) {
     logger.error(`[❌ CONNECTION-ERROR] Failed to connect sniper service: ${e.message}`);
