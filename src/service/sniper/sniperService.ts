@@ -665,7 +665,7 @@ export async function sniperService() {
                                   errorString.includes("Custom:6005");
             
             if (!isCommonError) {
-              logger.error(`[❌ LOGS-ERROR] ${signature} | ${formatSolanaError(err)}`);
+              //logger.error(`[❌ LOGS-ERROR] ${signature} | ${formatSolanaError(err)}`);
             }
             //return;
           }
