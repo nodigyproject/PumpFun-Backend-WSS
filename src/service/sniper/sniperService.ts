@@ -455,6 +455,8 @@ const monitorToken = async (
       // Only perform validation if end time is significant
       if (end_T > 10) {
         logger.info(`[🔍 VALIDATION] ${shortMint} | Performing token validation`);
+        const pumpDataTest = await getPumpData(new PublicKey(mint))
+        console.log('PUMP_DATA ' + JSON.stringify(pumpDataTest))
         const result = await validateToken(mint, user);
         isValid = result.isValid;
         pumpData = result.pumpData || pumpTokenData;
