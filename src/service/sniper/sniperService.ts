@@ -172,12 +172,6 @@ export const validateToken = async (mint: string, dev: PublicKey) => {
       }
     }
 
-    // If PumpData fetch failed, we can't proceed
-    if (!pumpData) {
-      logger.error(`[❌ VALIDATE-ERROR] ${shortMint} | Failed to fetch pump data`);
-      return { isValid: false, pumpData: null };
-    }
-
     // Market cap validation
     const _mc = Number(pumpData?.marketCap || 0);
     const _holders = allAccounts?.length || 0;
@@ -463,7 +457,7 @@ const monitorToken = async (
         logger.info(`[🔍 VALIDATION] ${shortMint} | Performing token validation`);
         const result = await validateToken(mint, user);
         isValid = result.isValid;
-        pumpData = result.pumpData;
+        pumpData = result.pumpData || pumpTokenData;
         
         logger.info(`[🔍 VALIDATION] ${shortMint} | Validation result: ${isValid ? '✅ Valid' : '❌ Invalid'}`);
       }
