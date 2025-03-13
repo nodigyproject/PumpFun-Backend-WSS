@@ -915,7 +915,8 @@ export class WssMonitorService {
       
       if (mcUsd < 7000 && now - createdTime > 2 * 24 * 60 * 60 * 1000) {
         logger.info(`[💰 SELL-SIGNAL] ${shortMint} | Selling because MC < $7K and age > 48h | MC: $${mcUsd.toFixed(2)}`);
-        
+        this.setTransactionInProgress(mintAddress, true);
+
         try {
           const txResult = await sellTokenSwap(mintAddress, curTokenAmount, true, false);
           if (txResult) {
@@ -924,7 +925,8 @@ export class WssMonitorService {
               this.addPendingTransaction(mintAddress, txResult, curTokenAmount);
               logger.info(`[🔄 PENDING] ${shortMint} | Low MC sell transaction pending | TxHash: ${txResult.slice(0, 8)}...`);
             }
-            
+            this.setTransactionInProgress(mintAddress, true);
+
             logger.info(`[✅ SOLD] ${shortMint} | Sold due to low MC and age | Amount: ${curTokenAmount / 10 ** TOKEN_DECIMALS} | Price: $${currentPrice_usd.toFixed(6)} | TxHash: ${typeof txResult === 'string' ? txResult.slice(0, 8) + '...' : 'N/A'}`);
             this.stopMonitoring(mintAddress);
             return;
@@ -940,7 +942,8 @@ export class WssMonitorService {
       // PRIORITY 3: Check loss exit condition
       if (raisePercent < 0 && Math.abs(raisePercent) > botSellConfig.lossExitPercent) {
         logger.info(`[💰 SELL-SIGNAL] ${shortMint} | Price dropped below stop loss (${raisePercent.toFixed(2)}% < -${botSellConfig.lossExitPercent}%)`);
-        
+        this.setTransactionInProgress(mintAddress, true);
+
         try {
           const txResult = await sellTokenSwap(mintAddress, curTokenAmount, true, false);
           if (txResult) {
@@ -949,7 +952,8 @@ export class WssMonitorService {
               this.addPendingTransaction(mintAddress, txResult, curTokenAmount);
               logger.info(`[🔄 PENDING] ${shortMint} | Stop loss sell transaction pending | TxHash: ${txResult.slice(0, 8)}...`);
             }
-            
+            this.setTransactionInProgress(mintAddress, true);
+
             logger.info(`[✅ SOLD] ${shortMint} | Sold due to stop loss | Amount: ${curTokenAmount / 10 ** TOKEN_DECIMALS} | Price: $${currentPrice_usd.toFixed(6)} | TxHash: ${typeof txResult === 'string' ? txResult.slice(0, 8) + '...' : 'N/A'}`);
             this.stopMonitoring(mintAddress);
             return;
@@ -979,7 +983,8 @@ export class WssMonitorService {
         
         if (raisePercent >= rule.revenue) {
           logger.info(`[💰 STEP-SELL] ${shortMint} | Step ${checkStep + 1}/4 | Target: ${rule.revenue.toFixed(2)}% | Current: ${raisePercent.toFixed(2)}% | Selling: ${rule.percent}%`);
-          
+          this.setTransactionInProgress(mintAddress, true);
+
           const sellPercent = rule.percent;
           
           // Get the invested amount from direct data if possible
@@ -1020,7 +1025,8 @@ export class WssMonitorService {
                 this.addPendingTransaction(mintAddress, txResult, sellAmount, checkStep);
                 logger.info(`[🔄 PENDING] ${shortMint} | Step ${checkStep + 1} sell transaction pending | TxHash: ${txResult.slice(0, 8)}...`);
               }
-              
+              this.setTransactionInProgress(mintAddress, false);
+
               logger.info(`[✅ STEP-SOLD] ${shortMint} | Successfully executed step ${checkStep + 1} sell | Amount: ${sellAmount / 10 ** TOKEN_DECIMALS} | Price: $${currentPrice_usd.toFixed(6)} | TxHash: ${typeof txResult === 'string' ? txResult.slice(0, 8) + '...' : 'N/A'}`);
               
               tokenSellingStep.set(mintAddress, checkStep + 1);
