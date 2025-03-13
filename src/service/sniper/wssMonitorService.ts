@@ -689,30 +689,43 @@ export class WssMonitorService {
   /**
    * Find the liquidity pool associated with a token
    */
-  private static async findLiquidityPoolForToken(mintAddress: string): Promise<{poolAddress?: PublicKey}> {
+  private static async findLiquidityPoolForToken(mintAddress: string, retries = 3): Promise<{poolAddress?: PublicKey}> {
     const shortMint = getTokenShortName(mintAddress);
     
-    try {
-      // Try to find pool in Raydium
-      const poolId = await fetchPoolInfoByMint(mintAddress);
-      if (poolId) {
-        logger.info(`[🏊 POOL] Found Raydium pool for ${shortMint}: ${poolId.slice(0, 8)}...`);
-        return { poolAddress: new PublicKey(poolId) };
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        // Try to find pool in Raydium
+        const poolId = await fetchPoolInfoByMint(mintAddress);
+        if (poolId) {
+          logger.info(`[🏊 POOL] Found Raydium pool for ${shortMint}: ${poolId.slice(0, 8)}...`);
+          return { poolAddress: new PublicKey(poolId) };
+        }
+        
+        // Try to find pool in Pump.fun
+        const pumpData = await getPumpData(new PublicKey(mintAddress));
+        if (pumpData && pumpData.bondingCurve) {
+          logger.info(`[🏊 POOL] Found Pump.fun pool for ${shortMint}: ${pumpData.bondingCurve.toString().slice(0, 8)}...`);
+          return { poolAddress: pumpData.bondingCurve };
+        }
+        
+        if (attempt < retries - 1) {
+          logger.warn(`[⚠️ RETRY-POOL] Could not find liquidity pool for ${shortMint} (attempt ${attempt+1}/${retries}), retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1))); // Backoff with each retry
+        } else {
+          logger.warn(`[⚠️ NO-POOL] Could not find liquidity pool for ${shortMint} after ${retries} attempts`);
+        }
+      } catch (error) {
+        if (attempt < retries - 1) {
+          logger.warn(`[⚠️ RETRY-POOL] Error finding pool for ${shortMint} (attempt ${attempt+1}/${retries}): ${error instanceof Error ? error.message : String(error)}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1))); // Backoff with each retry
+        } else {
+          logger.error(`[❌ POOL-ERROR] Error finding liquidity pool for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
-      
-      // Try to find pool in Pump.fun
-      const pumpData = await getPumpData(new PublicKey(mintAddress));
-      if (pumpData && pumpData.bondingCurve) {
-        logger.info(`[🏊 POOL] Found Pump.fun pool for ${shortMint}: ${pumpData.bondingCurve.toString().slice(0, 8)}...`);
-        return { poolAddress: pumpData.bondingCurve };
-      }
-      
-      logger.warn(`[⚠️ NO-POOL] Could not find liquidity pool for ${shortMint}`);
-      return {};
-    } catch (error) {
-      logger.error(`[❌ POOL-ERROR] Error finding liquidity pool for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
-      return {};
     }
+    
+    // If we get here, we couldn't find a pool after all retries
+    return {};
   }
 
   private static setTransactionInProgress(mintAddress: string, inProgress: boolean): void {
@@ -742,12 +755,33 @@ export class WssMonitorService {
     try {
       logger.info(`[⚡ EVENT] Detected pool change for token ${shortMint}, evaluating...`);
       
-      // With direct evaluation:
+      // Check if the token is still being monitored
+      if (!this.monitoredTokens.has(mintAddress)) {
+        logger.info(`[⚠️ EVENT-SKIP] ${shortMint} | Token is no longer being monitored, skipping evaluation`);
+        return;
+      }
+      
+      // Get the current selling step
+      const currentStep = tokenSellingStep.get(mintAddress) || 0;
+      logger.info(`[📊 EVENT-INFO] ${shortMint} | Current selling step: ${currentStep}/4`);
+      
+      // Check if transaction is in progress
+      if (this.isTransactionInProgress(mintAddress)) {
+        logger.info(`[🔒 EVENT-LOCK] ${shortMint} | Transaction in progress, skipping evaluation`);
+        return;
+      }
+      
       try {
-        // REMOVED: Check for active lock - always proceed with evaluation
-        
         // Clean up any expired transactions
         this.cleanupExpiredTransactions(mintAddress);
+        
+        // Check token balance
+        const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mintAddress);
+        if (curTokenAmount === 0) {
+          logger.info(`[🚫 ZERO-BALANCE] ${shortMint} | No tokens left in wallet, stopping monitoring`);
+          this.stopMonitoring(mintAddress);
+          return;
+        }
         
         // Get current token data and price
         const tokenData = await getTokenDataforAssets(mintAddress);
@@ -755,16 +789,26 @@ export class WssMonitorService {
         
         if (!currentPrice_usd || currentPrice_usd === 0) {
           logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
-          return;
+          return; // Don't stop monitoring, just skip this evaluation
         }
+        
+        // Log current state for debugging
+        logger.info(`[📊 EVENT-PRICE] ${shortMint} | Current price: $${currentPrice_usd.toFixed(6)}, Balance: ${curTokenAmount / 10 ** TOKEN_DECIMALS}`);
         
         // Check if we should sell based on price changes
         await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
+        
+        // Verify that monitoring continues if we haven't sold all tokens
+        if (curTokenAmount > 0 && currentStep < 4) {
+          logger.info(`[✅ EVENT-CONTINUE] ${shortMint} | Still have tokens (${curTokenAmount / 10 ** TOKEN_DECIMALS}) and steps to go (${currentStep}/4), continuing monitoring`);
+        }
       } catch (error) {
         logger.error(`[❌ POOL-EVENT-ERROR] Error in pool change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+        // Don't stop monitoring on error
       }
     } catch (error) {
       logger.error(`[❌ EVENT-ERROR] Error handling account change for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+      // Don't stop monitoring on error
     }
   }
 
