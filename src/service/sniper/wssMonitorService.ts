@@ -1002,7 +1002,7 @@ export class WssMonitorService {
               this.addPendingTransaction(mintAddress, txResult, curTokenAmount);
               logger.info(`[🔄 PENDING] ${shortMint} | Low MC sell transaction pending | TxHash: ${txResult.slice(0, 8)}...`);
             }
-            this.setTransactionInProgress(mintAddress, true);
+            this.setTransactionInProgress(mintAddress, false);
 
             logger.info(`[✅ SOLD] ${shortMint} | Sold due to low MC and age | Amount: ${curTokenAmount / 10 ** TOKEN_DECIMALS} | Price: $${currentPrice_usd.toFixed(6)} | TxHash: ${typeof txResult === 'string' ? txResult.slice(0, 8) + '...' : 'N/A'}`);
             this.stopMonitoring(mintAddress);
@@ -1029,7 +1029,7 @@ export class WssMonitorService {
               this.addPendingTransaction(mintAddress, txResult, curTokenAmount);
               logger.info(`[🔄 PENDING] ${shortMint} | Stop loss sell transaction pending | TxHash: ${txResult.slice(0, 8)}...`);
             }
-            this.setTransactionInProgress(mintAddress, true);
+            this.setTransactionInProgress(mintAddress, false);
 
             logger.info(`[✅ SOLD] ${shortMint} | Sold due to stop loss | Amount: ${curTokenAmount / 10 ** TOKEN_DECIMALS} | Price: $${currentPrice_usd.toFixed(6)} | TxHash: ${typeof txResult === 'string' ? txResult.slice(0, 8) + '...' : 'N/A'}`);
             this.stopMonitoring(mintAddress);
