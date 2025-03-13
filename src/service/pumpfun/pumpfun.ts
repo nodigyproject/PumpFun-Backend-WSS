@@ -50,7 +50,7 @@ const tokenPriceMap: Map<string, number> = new Map();
 
 export async function getPumpData(mint: PublicKey, logging: boolean = false): Promise<PumpData | null> {
   const shortMint = mint.toString().slice(0, 8) + '...';
-  if (logging) logger.info(`[🔍 PUMP-DATA] ${shortMint} | Attempting to get pump data`);
+  if (logging) logger.info(`[🔍 PUMP-DATA] ${mint.toString()} | Attempting to get pump data`);
   
   const mint_account = mint.toBuffer();
   const [bondingCurve] = PublicKey.findProgramAddressSync(
