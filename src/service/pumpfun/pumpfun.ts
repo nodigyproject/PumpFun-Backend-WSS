@@ -48,16 +48,16 @@ import logger from "../../logs/logger";
 const tokenPriceMap: Map<string, number> = new Map();
 
 
-export async function getPumpData(mint: PublicKey): Promise<PumpData | null> {
+export async function getPumpData(mint: PublicKey, logging: boolean = false): Promise<PumpData | null> {
   const shortMint = mint.toString().slice(0, 8) + '...';
-  logger.info(`[🔍 PUMP-DATA] ${shortMint} | Attempting to get pump data`);
+  if (logging) logger.info(`[🔍 PUMP-DATA] ${shortMint} | Attempting to get pump data`);
   
   const mint_account = mint.toBuffer();
   const [bondingCurve] = PublicKey.findProgramAddressSync(
     [Buffer.from("bonding-curve"), mint_account],
     PUMP_FUN_PROGRAM
   );
-  logger.info(`[🔍 PUMP-DATA] ${shortMint} | Derived bonding curve: ${bondingCurve.toString().slice(0, 8)}...`);
+  if (logging) logger.info(`[🔍 PUMP-DATA] ${shortMint} | Derived bonding curve: ${bondingCurve.toString().slice(0, 8)}...`);
   
   const [associatedBondingCurve] = PublicKey.findProgramAddressSync(
     [bondingCurve.toBuffer(), spl.TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
@@ -74,25 +74,25 @@ export async function getPumpData(mint: PublicKey): Promise<PumpData | null> {
   
   const response = await connection.getAccountInfo(bondingCurve);
   if (response === null) {
-    logger.warn(`[❌ PUMP-DATA] ${shortMint} | No account info found for bonding curve`);
+    if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | No account info found for bonding curve`);
     return null;
   }
   
-  logger.info(`[✅ PUMP-DATA] ${shortMint} | Successfully retrieved account info`);
+  if (logging) logger.info(`[✅ PUMP-DATA] ${shortMint} | Successfully retrieved account info`);
   
   const virtualTokenReserves = readBigUintLE(
     response.data,
     PUMP_CURVE_STATE_OFFSETS.VIRTUAL_TOKEN_RESERVES,
     8
   );
-  logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualTokenReserves: ${virtualTokenReserves}`);
+  if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualTokenReserves: ${virtualTokenReserves}`);
   
   const virtualSolReserves = readBigUintLE(
     response.data,
     PUMP_CURVE_STATE_OFFSETS.VIRTUAL_SOL_RESERVES,
     8
   );
-  logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualSolReserves: ${virtualSolReserves}`);
+  if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualSolReserves: ${virtualSolReserves}`);
   
   const realTokenReserves = readBigUintLE(
     response.data,
@@ -117,7 +117,7 @@ export async function getPumpData(mint: PublicKey): Promise<PumpData | null> {
   const progress = 100 - (leftTokens * 100) / initialRealTokenReserves;
   
   const solPrice = getCachedSolPrice();
-  logger.info(`[💰 PUMP-DATA] ${shortMint} | Current SOL price: $${solPrice}`);
+  if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Current SOL price: $${solPrice}`);
   
   const price =
     (solPrice * virtualSolReserves) /
@@ -125,14 +125,14 @@ export async function getPumpData(mint: PublicKey): Promise<PumpData | null> {
     (virtualTokenReserves / 10 ** TOKEN_DECIMALS);
   
   const marketCap = (price * totalSupply) / 10 ** TOKEN_DECIMALS;
-  logger.info(`[💰 PUMP-DATA] ${shortMint} | Calculated price: $${price.toFixed(8)}, Market Cap: $${marketCap.toFixed(2)}`);
+  if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Calculated price: $${price.toFixed(8)}, Market Cap: $${marketCap.toFixed(2)}`);
 
   if(virtualSolReserves === 0 || virtualTokenReserves === 0) {
-    logger.warn(`[❌ PUMP-DATA] ${shortMint} | Returning null due to zero reserves`);
+    if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | Returning null due to zero reserves`);
     return null;
   }
   
-  logger.info(`[✅ PUMP-DATA] ${shortMint} | Successfully created pump data object`);
+  if (logging) logger.info(`[✅ PUMP-DATA] ${shortMint} | Successfully created pump data object`);
   
   return {
     bondingCurve,
