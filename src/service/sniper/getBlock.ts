@@ -4,7 +4,7 @@ import { getSolPrice } from "../../utils/utils";
 import logger from "../../logs/logger";
 
 let lastValidBlockhash = "";
-let cachedSolPrice = 160; 
+let cachedSolPrice = 126; 
 
 // Function to fetch the latest blockhash and cache it
 export async function fetchLastValidBlockhash() {
@@ -28,6 +28,6 @@ export function getLastValidBlockhash(): string {
 
 export const getCachedSolPrice = () => {
   // Make sure we always return a valid number
-  const cachedPrice = cachedSolPrice || 123;
-  return typeof cachedPrice === 'number' ? cachedPrice : 160;
+  const cachedPrice = cachedSolPrice || 126;
+  return typeof cachedPrice === 'number' ? cachedPrice : 126;
 };
