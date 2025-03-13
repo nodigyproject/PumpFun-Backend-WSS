@@ -2,7 +2,7 @@ import { Commitment, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { connection, metaplex, START_TXT, wallet } from "../../config";
 import { SniperBotConfig } from "../setting/botConfigClass";
-import { getPumpData, getTokenBalance } from "../pumpfun/pumpfun";
+import { getPumpData, getTokenBalance, getPumpDataWithRetry} from "../pumpfun/pumpfun";
 import { PUMPFUN_IMG, TOKEN_DECIMALS, TOTAL_SUPPLY } from "../../utils/constants";
 import { swap } from "../swap/swap";
 import { saveTXonDB } from "../tx/TxService";
@@ -455,7 +455,7 @@ const monitorToken = async (
       // Only perform validation if end time is significant
       if (end_T > 10) {
         logger.info(`[🔍 VALIDATION] ${shortMint} | Performing token validation`);
-        const pumpDataTest = await getPumpData(new PublicKey(mint), true)
+        const pumpDataTest = await getPumpDataWithRetry(new PublicKey(mint))
         console.log('PUMP_DATA ' + JSON.stringify(pumpDataTest))
         const result = await validateToken(mint, user);
         isValid = result.isValid;

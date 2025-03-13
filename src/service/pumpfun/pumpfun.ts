@@ -160,6 +160,29 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
   };
 }
 
+export async function getPumpDataWithRetry(mint: PublicKey, retries = 3, delay = 1000, logging = false): Promise<PumpData | null> {
+  let attempt = 0;
+  
+  while (attempt <= retries) {
+    if (attempt > 0) {
+      if (logging) logger.info(`[🔄 RETRY] ${mint.toString().slice(0, 8)}... | Attempt ${attempt}/${retries} after ${delay}ms delay`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      // Increase delay for next attempt
+      delay = delay * 1.5;
+    }
+    
+    const result = await getPumpData(mint, true);
+    if (result !== null) {
+      return result;
+    }
+    
+    attempt++;
+  }
+  
+  if (logging) logger.warn(`[❌ FAILED] ${mint.toString().slice(0, 8)}... | Failed to get pump data after ${retries} retries`);
+  return null;
+}
+
 export async function getPumpTokenPriceUSD(mint: string): Promise<{
   price: number;
   pumpData?: PumpData;
