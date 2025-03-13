@@ -64,6 +64,14 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
     spl.ASSOCIATED_TOKEN_PROGRAM_ID
   );
   
+  const PUMP_CURVE_STATE_OFFSETS = {
+    VIRTUAL_TOKEN_RESERVES: 0x08,
+    VIRTUAL_SOL_RESERVES: 0x10,
+    REAL_TOKEN_RESERVES: 0x18,
+    REAL_SOL_RESERVES: 0x20,
+    TOTAL_SUPPLY: 0x28,
+  };
+  
   const response = await connection.getAccountInfo(bondingCurve);
   if (response === null) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | No account info found for bonding curve`);
@@ -74,29 +82,54 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
   
   // Validate discriminator
   const BONDING_CURVE_DISCRIMINATOR = Buffer.from([0x17, 0xb7, 0xf8, 0x37, 0x60, 0xd8, 0xac, 0x60]);
-  if (!Buffer.from(response.data.slice(0, 8)).equals(BONDING_CURVE_DISCRIMINATOR)) {
+  const accountDataDiscriminator = response.data.slice(0, 8);
+  const isValidDiscriminator = Buffer.compare(Buffer.from(accountDataDiscriminator), BONDING_CURVE_DISCRIMINATOR) === 0;
+  
+  if (!isValidDiscriminator) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | Invalid bonding curve discriminator`);
     return null;
   }
   
-  // Start reading data after the discriminator (byte 8)
-  const dataView = new DataView(response.data.buffer.slice(8));
-  
-  // Read u64 values (8 bytes each)
-  const virtualTokenReserves = dataView.getBigUint64(0, true); // true for little-endian
+  // Use your existing readBigUintLE function instead of DataView
+  const virtualTokenReserves = readBigUintLE(
+    response.data,
+    PUMP_CURVE_STATE_OFFSETS.VIRTUAL_TOKEN_RESERVES,
+    8
+  );
   if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualTokenReserves: ${virtualTokenReserves}`);
   
-  const virtualSolReserves = dataView.getBigUint64(8, true);
+  const virtualSolReserves = readBigUintLE(
+    response.data,
+    PUMP_CURVE_STATE_OFFSETS.VIRTUAL_SOL_RESERVES,
+    8
+  );
   if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualSolReserves: ${virtualSolReserves}`);
   
-  const realTokenReserves = dataView.getBigUint64(16, true);
-  const realSolReserves = dataView.getBigUint64(24, true);
-  const totalSupply = dataView.getBigUint64(32, true);
+  const realTokenReserves = readBigUintLE(
+    response.data,
+    PUMP_CURVE_STATE_OFFSETS.REAL_TOKEN_RESERVES,
+    8
+  );
   
-  // Continue with your existing logic
-  const leftTokens = realTokenReserves - 206900000n;
-  const initialRealTokenReserves = totalSupply - 206900000n;
-  const progress = 100 - (Number(leftTokens * 100n) / Number(initialRealTokenReserves));
+  const realSolReserves = readBigUintLE(
+    response.data,
+    PUMP_CURVE_STATE_OFFSETS.REAL_SOL_RESERVES,
+    8
+  );
+  
+  const totalSupply = readBigUintLE(
+    response.data,
+    PUMP_CURVE_STATE_OFFSETS.TOTAL_SUPPLY,
+    8
+  );
+
+  // Use JavaScript number operations instead of BigInt literals
+  const CONSTANT_VALUE = 206900000; // Instead of 206900000n
+  
+  // Convert to numbers for calculations (since you're already doing this in your original code)
+  const leftTokens = Number(realTokenReserves) - CONSTANT_VALUE;
+  const initialRealTokenReserves = Number(totalSupply) - CONSTANT_VALUE;
+  const progress = 100 - (leftTokens * 100) / initialRealTokenReserves;
   
   const solPrice = getCachedSolPrice();
   if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Current SOL price: $${solPrice}`);
@@ -108,7 +141,7 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
   const marketCap = (price * Number(totalSupply)) / 10 ** TOKEN_DECIMALS;
   if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Calculated price: $${price.toFixed(8)}, Market Cap: $${marketCap.toFixed(2)}`);
 
-  if(virtualSolReserves === 0n || virtualTokenReserves === 0n) {
+  if(Number(virtualSolReserves) === 0 || Number(virtualTokenReserves) === 0) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | Returning null due to zero reserves`);
     return null;
   }
