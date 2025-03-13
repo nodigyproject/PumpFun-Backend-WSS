@@ -6,7 +6,7 @@ import { getPumpData, getTokenBalance, getPumpDataWithRetry} from "../pumpfun/pu
 import { PUMPFUN_IMG, TOKEN_DECIMALS, TOTAL_SUPPLY } from "../../utils/constants";
 import { swap } from "../swap/swap";
 import { saveTXonDB } from "../tx/TxService";
-import { getCachedSolPrice } from "./getBlock";
+import { getCachedSolPrice, getLastValidBlockhash } from "./getBlock";
 import logger from "../../logs/logger";
 import { SwapParam, ITxntmpData, IAlertMsg, PumpData } from "../../utils/types";
 import {
@@ -405,7 +405,7 @@ const monitorToken = async (
 ) => {
   const shortMint = mint.slice(0, 8) + '...';
   logger.info(`[🔍 MONITOR-TOKEN] ${shortMint} | Starting buy monitoring`);
-  
+  await getLastValidBlockhash() 
   // Add to global buying map
   tokenBuyingMap.set(mint, Date.now());
   

@@ -187,6 +187,7 @@ export const getSolPrice = async () => {
     const response = await fetch(BaseURL);
     const data = await response.json();
     const price = data.data[WSOL]?.price;
+    logger.info(`[SOL PRICE] ${Date.now()} | ${price}`);
     return price;
   } catch (error) {
     // logger.error("Error fetching SOL price: " + error);
