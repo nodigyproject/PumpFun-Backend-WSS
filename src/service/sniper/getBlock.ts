@@ -28,6 +28,6 @@ export function getLastValidBlockhash(): string {
 
 export const getCachedSolPrice = () => {
   // Make sure we always return a valid number
-  const cachedPrice = cachedSolPrice || 160;
+  const cachedPrice = cachedSolPrice || 123;
   return typeof cachedPrice === 'number' ? cachedPrice : 160;
 };
