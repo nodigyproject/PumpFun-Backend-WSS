@@ -778,9 +778,9 @@ export class WssMonitorService {
         // Check token balance
         const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mintAddress);
         if (curTokenAmount === 0) {
-          logger.info(`[🚫 ZERO-BALANCE] ${shortMint} | No tokens left in wallet, stopping monitoring`);
-          this.stopMonitoring(mintAddress);
-          return;
+          // logger.info(`[🚫 ZERO-BALANCE] ${shortMint} | No tokens left in wallet, stopping monitoring`);
+          // this.stopMonitoring(mintAddress);
+          // return;
         }
         
         // Get current token data and price
@@ -972,7 +972,8 @@ export class WssMonitorService {
               this.addPendingTransaction(mintAddress, txResult, curTokenAmount, undefined, true);
               logger.info(`[🔄 PENDING] ${shortMint} | Stagnation sell transaction pending | TxHash: ${txResult.slice(0, 8)}...`);
             }
-            
+            this.setTransactionInProgress(mintAddress, false);
+
             logger.info(`[✅ SOLD] ${shortMint} | Sold due to insufficient price growth | Amount: ${curTokenAmount / 10 ** TOKEN_DECIMALS} | Price: $${currentPrice_usd.toFixed(6)} | TxHash: ${typeof txResult === 'string' ? txResult.slice(0, 8) + '...' : 'N/A'}`);
             this.stopMonitoring(mintAddress);
             return;
