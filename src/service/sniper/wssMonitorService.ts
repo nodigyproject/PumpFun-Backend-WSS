@@ -825,11 +825,33 @@ export class WssMonitorService {
     try {
       logger.info(`[⚡ EVENT] Detected token program change for ${shortMint}, evaluating...`);
       
+      // Check if the token is still being monitored
+      if (!this.monitoredTokens.has(mintAddress)) {
+        logger.info(`[⚠️ EVENT-SKIP] ${shortMint} | Token is no longer being monitored, skipping evaluation`);
+        return;
+      }
+      
+      // Get the current selling step
+      const currentStep = tokenSellingStep.get(mintAddress) || 0;
+      logger.info(`[📊 EVENT-INFO] ${shortMint} | Current selling step: ${currentStep}/4`);
+      
+      // Check if transaction is in progress
+      if (this.isTransactionInProgress(mintAddress)) {
+        logger.info(`[🔒 EVENT-LOCK] ${shortMint} | Transaction in progress, skipping evaluation`);
+        return;
+      }
+      
       try {
-        // REMOVED: Check for active lock - always proceed with evaluation
-        
         // Clean up any expired transactions
         this.cleanupExpiredTransactions(mintAddress);
+        
+        // Check token balance
+        const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mintAddress);
+        if (curTokenAmount === 0) {
+          logger.info(`[🚫 ZERO-BALANCE] ${shortMint} | No tokens left in wallet, stopping monitoring`);
+          this.stopMonitoring(mintAddress);
+          return;
+        }
         
         // Get current token data and price
         const tokenData = await getTokenDataforAssets(mintAddress);
@@ -837,15 +859,26 @@ export class WssMonitorService {
         
         if (!currentPrice_usd || currentPrice_usd === 0) {
           logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
-          return;
+          return; // Don't stop monitoring, just skip this evaluation
         }
         
+        // Log current state for debugging
+        logger.info(`[📊 EVENT-PRICE] ${shortMint} | Current price: $${currentPrice_usd.toFixed(6)}, Balance: ${curTokenAmount / 10 ** TOKEN_DECIMALS}`);
+        
+        // Check if we should sell based on price changes
         await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
+        
+        // Verify that monitoring continues if we haven't sold all tokens
+        if (curTokenAmount > 0 && currentStep < 4) {
+          logger.info(`[✅ EVENT-CONTINUE] ${shortMint} | Still have tokens (${curTokenAmount / 10 ** TOKEN_DECIMALS}) and steps to go (${currentStep}/4), continuing monitoring`);
+        }
       } catch (error) {
         logger.error(`[❌ TOKEN-EVENT-ERROR] Error in token program change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+        // Don't stop monitoring on error
       }
     } catch (error) {
       logger.error(`[❌ EVENT-ERROR] Error handling token program change for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+      // Don't stop monitoring on error
     }
   }
 
@@ -1102,7 +1135,7 @@ export class WssMonitorService {
     try {
       this.setTransactionInProgress(mintAddress, false);
       logger.info(`[✅ UNLOCKED] ${shortMint} `);
-
+  
       // Find the pending transaction
       const pending = pendingTransactions.get(mintAddress) || [];
       const transaction = pending.find(tx => tx.txHash === txHash);
@@ -1117,12 +1150,21 @@ export class WssMonitorService {
         
         // Update selling step if it was a step sell
         if (transaction.sellStep !== undefined) {
-          tokenSellingStep.set(mintAddress, transaction.sellStep + 1);
-          logger.info(`[📊 STEP-UPDATE] ${shortMint} | Updated selling step to ${transaction.sellStep + 1}/4`);
+          const newStep = transaction.sellStep + 1;
+          tokenSellingStep.set(mintAddress, newStep);
+          logger.info(`[📊 STEP-UPDATE] ${shortMint} | Updated selling step to ${newStep}/4`);
+          
+          // Only stop monitoring if it's the final step (step 3 becomes step 4)
+          if (newStep >= 4) {
+            logger.info(`[🏁 FINAL-STEP] ${shortMint} | All steps completed, stopping monitoring`);
+            this.stopMonitoring(mintAddress);
+          } else {
+            logger.info(`[🔄 CONTINUE] ${shortMint} | Step ${newStep}/4 reached, continuing monitoring for next steps`);
+          }
         }
-        
-        // If it was a stagnation sell or final step, stop monitoring
-        if (transaction.isStagnationSell || transaction.sellStep === 3) {
+        // Only stop monitoring for stagnation sell, not for regular step sells
+        else if (transaction.isStagnationSell) {
+          logger.info(`[🏁 STAGNATION-SELL] ${shortMint} | Stagnation sell complete, stopping monitoring`);
           this.stopMonitoring(mintAddress);
         }
       } else {
