@@ -64,14 +64,6 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
     spl.ASSOCIATED_TOKEN_PROGRAM_ID
   );
   
-  const PUMP_CURVE_STATE_OFFSETS = {
-    VIRTUAL_TOKEN_RESERVES: 0x08,
-    VIRTUAL_SOL_RESERVES: 0x10,
-    REAL_TOKEN_RESERVES: 0x18,
-    REAL_SOL_RESERVES: 0x20,
-    TOTAL_SUPPLY: 0x28,
-  };
-  
   const response = await connection.getAccountInfo(bondingCurve);
   if (response === null) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | No account info found for bonding curve`);
@@ -80,54 +72,43 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
   
   if (logging) logger.info(`[✅ PUMP-DATA] ${shortMint} | Successfully retrieved account info`);
   
-  const virtualTokenReserves = readBigUintLE(
-    response.data,
-    PUMP_CURVE_STATE_OFFSETS.VIRTUAL_TOKEN_RESERVES,
-    8
-  );
+  // Validate discriminator
+  const BONDING_CURVE_DISCRIMINATOR = Buffer.from([0x17, 0xb7, 0xf8, 0x37, 0x60, 0xd8, 0xac, 0x60]);
+  if (!Buffer.from(response.data.slice(0, 8)).equals(BONDING_CURVE_DISCRIMINATOR)) {
+    if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | Invalid bonding curve discriminator`);
+    return null;
+  }
+  
+  // Start reading data after the discriminator (byte 8)
+  const dataView = new DataView(response.data.buffer.slice(8));
+  
+  // Read u64 values (8 bytes each)
+  const virtualTokenReserves = dataView.getBigUint64(0, true); // true for little-endian
   if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualTokenReserves: ${virtualTokenReserves}`);
   
-  const virtualSolReserves = readBigUintLE(
-    response.data,
-    PUMP_CURVE_STATE_OFFSETS.VIRTUAL_SOL_RESERVES,
-    8
-  );
+  const virtualSolReserves = dataView.getBigUint64(8, true);
   if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualSolReserves: ${virtualSolReserves}`);
   
-  const realTokenReserves = readBigUintLE(
-    response.data,
-    PUMP_CURVE_STATE_OFFSETS.REAL_TOKEN_RESERVES,
-    8
-  );
+  const realTokenReserves = dataView.getBigUint64(16, true);
+  const realSolReserves = dataView.getBigUint64(24, true);
+  const totalSupply = dataView.getBigUint64(32, true);
   
-  const realSolReserves = readBigUintLE(
-    response.data,
-    PUMP_CURVE_STATE_OFFSETS.REAL_SOL_RESERVES,
-    8
-  );
-  
-  const totalSupply = readBigUintLE(
-    response.data,
-    PUMP_CURVE_STATE_OFFSETS.TOTAL_SUPPLY,
-    8
-  );
-
-  const leftTokens = realTokenReserves - 206900000;
-  const initialRealTokenReserves = totalSupply - 206900000;
-  const progress = 100 - (leftTokens * 100) / initialRealTokenReserves;
+  // Continue with your existing logic
+  const leftTokens = realTokenReserves - 206900000n;
+  const initialRealTokenReserves = totalSupply - 206900000n;
+  const progress = 100 - (Number(leftTokens * 100n) / Number(initialRealTokenReserves));
   
   const solPrice = getCachedSolPrice();
   if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Current SOL price: $${solPrice}`);
   
-  const price =
-    (solPrice * virtualSolReserves) /
-    LAMPORTS_PER_SOL /
-    (virtualTokenReserves / 10 ** TOKEN_DECIMALS);
+  const price = (solPrice * Number(virtualSolReserves)) / 
+               LAMPORTS_PER_SOL / 
+               (Number(virtualTokenReserves) / 10 ** TOKEN_DECIMALS);
   
-  const marketCap = (price * totalSupply) / 10 ** TOKEN_DECIMALS;
+  const marketCap = (price * Number(totalSupply)) / 10 ** TOKEN_DECIMALS;
   if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Calculated price: $${price.toFixed(8)}, Market Cap: $${marketCap.toFixed(2)}`);
 
-  if(virtualSolReserves === 0 || virtualTokenReserves === 0) {
+  if(virtualSolReserves === 0n || virtualTokenReserves === 0n) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | Returning null due to zero reserves`);
     return null;
   }
@@ -137,9 +118,9 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
   return {
     bondingCurve,
     associatedBondingCurve,
-    virtualSolReserves,
-    virtualTokenReserves,
-    totalSupply,
+    virtualSolReserves: Number(virtualSolReserves),
+    virtualTokenReserves: Number(virtualTokenReserves),
+    totalSupply: Number(totalSupply),
     progress,
     price,
     marketCap,
