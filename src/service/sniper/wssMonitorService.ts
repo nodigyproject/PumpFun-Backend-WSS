@@ -615,6 +615,15 @@ export class WssMonitorService {
     const shortMint = getTokenShortName(mintAddress);
     const pending = pendingTransactions.get(mintAddress) || [];
     
+    // Check if transaction with the same hash already exists in pending list
+    const isDuplicate = pending.some(tx => tx.txHash === txHash);
+    
+    if (isDuplicate) {
+      logger.warn(`[⚠️ DUPLICATE-TX] ${shortMint} | Transaction ${txHash.slice(0, 8)}... already exists in pending list. Skipping.`);
+      return; // Exit without adding the duplicate
+    }
+    
+    // Add new transaction to pending list
     pending.push({
       txHash,
       amount,
@@ -743,74 +752,89 @@ export class WssMonitorService {
   }
 
   /**
-   * Handle changes in liquidity pool account
-   */
-  private static async handlePoolAccountChange(
-    mintAddress: string, 
-    accountInfo: AccountInfo<Buffer>, 
-    context: Context
-  ): Promise<void> {
-    const shortMint = getTokenShortName(mintAddress);
+ * Handle changes in liquidity pool account
+ */
+private static async handlePoolAccountChange(
+  mintAddress: string, 
+  accountInfo: AccountInfo<Buffer>, 
+  context: Context
+): Promise<void> {
+  const shortMint = getTokenShortName(mintAddress);
+  
+  try {
+    logger.info(`[⚡ EVENT] Detected pool change for token ${shortMint}, evaluating...`);
+    
+    // Check if the token is still being monitored
+    if (!this.monitoredTokens.has(mintAddress)) {
+      logger.info(`[⚠️ EVENT-SKIP] ${shortMint} | Token is no longer being monitored, skipping evaluation`);
+      return;
+    }
+    
+    // Get the current selling step
+    const currentStep = tokenSellingStep.get(mintAddress) || 0;
+    logger.info(`[📊 EVENT-INFO] ${shortMint} | Current selling step: ${currentStep}/4`);
+    
+    // CRITICAL: Set transaction lock EARLY to prevent race conditions between multiple event handlers
+    // If we can't acquire the lock, skip this evaluation entirely
+    if (this.isTransactionInProgress(mintAddress)) {
+      logger.info(`[🔒 EVENT-LOCK] ${shortMint} | Transaction already in progress, skipping evaluation`);
+      return;
+    }
+    
+    // Set the lock immediately - BEFORE doing any work
+    this.setTransactionInProgress(mintAddress, true);
+    logger.info(`[🔒 EVENT-LOCK-ACQUIRED] ${shortMint} | Acquired evaluation lock`);
     
     try {
-      logger.info(`[⚡ EVENT] Detected pool change for token ${shortMint}, evaluating...`);
+      // Clean up any expired transactions
+      this.cleanupExpiredTransactions(mintAddress);
       
-      // Check if the token is still being monitored
-      if (!this.monitoredTokens.has(mintAddress)) {
-        logger.info(`[⚠️ EVENT-SKIP] ${shortMint} | Token is no longer being monitored, skipping evaluation`);
+      // Check token balance
+      const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mintAddress);
+      if (curTokenAmount === 0) {
+        // logger.info(`[🚫 ZERO-BALANCE] ${shortMint} | No tokens left in wallet, stopping monitoring`);
+        // this.stopMonitoring(mintAddress);
+        // return;
+      }
+      
+      // Get current token data and price
+      const tokenData = await getTokenDataforAssets(mintAddress);
+      const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+      
+      if (!currentPrice_usd || currentPrice_usd === 0) {
+        logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
+        // Release the lock since we're not proceeding with transaction
+        this.setTransactionInProgress(mintAddress, false);
         return;
       }
       
-      // Get the current selling step
-      const currentStep = tokenSellingStep.get(mintAddress) || 0;
-      logger.info(`[📊 EVENT-INFO] ${shortMint} | Current selling step: ${currentStep}/4`);
+      // Log current state for debugging
+      logger.info(`[📊 EVENT-PRICE] ${shortMint} | Current price: $${currentPrice_usd.toFixed(6)}, Balance: ${curTokenAmount / 10 ** TOKEN_DECIMALS}`);
       
-      // Check if transaction is in progress
-      if (this.isTransactionInProgress(mintAddress)) {
-        logger.info(`[🔒 EVENT-LOCK] ${shortMint} | Transaction in progress, skipping evaluation`);
-        return;
-      }
+      // Check if we should sell based on price changes
+      // Note: We don't need to reset the lock here as evaluateSellConditions will handle that
+      await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
       
-      try {
-        // Clean up any expired transactions
-        this.cleanupExpiredTransactions(mintAddress);
-        
-        // Check token balance
-        const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mintAddress);
-        if (curTokenAmount === 0) {
-          // logger.info(`[🚫 ZERO-BALANCE] ${shortMint} | No tokens left in wallet, stopping monitoring`);
-          // this.stopMonitoring(mintAddress);
-          // return;
-        }
-        
-        // Get current token data and price
-        const tokenData = await getTokenDataforAssets(mintAddress);
-        const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
-        
-        if (!currentPrice_usd || currentPrice_usd === 0) {
-          logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
-          return; // Don't stop monitoring, just skip this evaluation
-        }
-        
-        // Log current state for debugging
-        logger.info(`[📊 EVENT-PRICE] ${shortMint} | Current price: $${currentPrice_usd.toFixed(6)}, Balance: ${curTokenAmount / 10 ** TOKEN_DECIMALS}`);
-        
-        // Check if we should sell based on price changes
-        await this.evaluateSellConditions(mintAddress, tokenData, currentPrice_usd);
-        
-        // Verify that monitoring continues if we haven't sold all tokens
-        if (curTokenAmount > 0 && currentStep < 4) {
-          logger.info(`[✅ EVENT-CONTINUE] ${shortMint} | Still have tokens (${curTokenAmount / 10 ** TOKEN_DECIMALS}) and steps to go (${currentStep}/4), continuing monitoring`);
-        }
-      } catch (error) {
-        logger.error(`[❌ POOL-EVENT-ERROR] Error in pool change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
-        // Don't stop monitoring on error
+      // Verify that monitoring continues if we haven't sold all tokens
+      if (curTokenAmount > 0 && currentStep < 4) {
+        logger.info(`[✅ EVENT-CONTINUE] ${shortMint} | Still have tokens (${curTokenAmount / 10 ** TOKEN_DECIMALS}) and steps to go (${currentStep}/4), continuing monitoring`);
       }
     } catch (error) {
-      logger.error(`[❌ EVENT-ERROR] Error handling account change for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
-      // Don't stop monitoring on error
+      logger.error(`[❌ POOL-EVENT-ERROR] Error in pool change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+      // Make sure we release the lock on error
+      this.setTransactionInProgress(mintAddress, false);
+    }
+  } catch (error) {
+    logger.error(`[❌ EVENT-ERROR] Error handling account change for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+    // Also try to release the lock here in case of outer error
+    try {
+      this.setTransactionInProgress(mintAddress, false);
+    } catch (unlockError) {
+      // Just log, don't throw
+      logger.error(`[❌ UNLOCK-ERROR] Failed to release lock: ${unlockError instanceof Error ? unlockError.message : String(unlockError)}`);
     }
   }
+}
 
   /**
    * Handle token program changes
@@ -835,11 +859,15 @@ export class WssMonitorService {
       const currentStep = tokenSellingStep.get(mintAddress) || 0;
       logger.info(`[📊 EVENT-INFO] ${shortMint} | Current selling step: ${currentStep}/4`);
       
-      // Check if transaction is in progress
+      // CRITICAL: Set transaction lock EARLY to prevent race conditions between multiple event handlers
       if (this.isTransactionInProgress(mintAddress)) {
-        logger.info(`[🔒 EVENT-LOCK] ${shortMint} | Transaction in progress, skipping evaluation`);
+        logger.info(`[🔒 EVENT-LOCK] ${shortMint} | Transaction already in progress, skipping evaluation`);
         return;
       }
+      
+      // Set the lock immediately - BEFORE doing any work
+      this.setTransactionInProgress(mintAddress, true);
+      logger.info(`[🔒 EVENT-LOCK-ACQUIRED] ${shortMint} | Acquired evaluation lock`);
       
       try {
         // Clean up any expired transactions
@@ -847,11 +875,6 @@ export class WssMonitorService {
         
         // Check token balance
         const curTokenAmount = await getTokenBalance(wallet.publicKey.toBase58(), mintAddress);
-        if (curTokenAmount === 0) {
-          // logger.info(`[🚫 ZERO-BALANCE] ${shortMint} | No tokens left in wallet, stopping monitoring`);
-          // this.stopMonitoring(mintAddress);
-          // return;
-        }
         
         // Get current token data and price
         const tokenData = await getTokenDataforAssets(mintAddress);
@@ -859,7 +882,9 @@ export class WssMonitorService {
         
         if (!currentPrice_usd || currentPrice_usd === 0) {
           logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
-          return; // Don't stop monitoring, just skip this evaluation
+          // Release the lock since we're not proceeding
+          this.setTransactionInProgress(mintAddress, false);
+          return;
         }
         
         // Log current state for debugging
@@ -874,11 +899,18 @@ export class WssMonitorService {
         }
       } catch (error) {
         logger.error(`[❌ TOKEN-EVENT-ERROR] Error in token program change handler for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
-        // Don't stop monitoring on error
+        // Make sure to release the lock on error
+        this.setTransactionInProgress(mintAddress, false);
       }
     } catch (error) {
       logger.error(`[❌ EVENT-ERROR] Error handling token program change for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
-      // Don't stop monitoring on error
+      // Also try to release the lock here in case of outer error
+      try {
+        this.setTransactionInProgress(mintAddress, false);
+      } catch (unlockError) {
+        // Just log, don't throw
+        logger.error(`[❌ UNLOCK-ERROR] Failed to release lock: ${unlockError instanceof Error ? unlockError.message : String(unlockError)}`);
+      }
     }
   }
 
