@@ -89,6 +89,7 @@ export async function fetchTokenData(mint: string): Promise<any> {
 // First, create an in-memory transaction cache at module level
 const processedTransactions = new Set<string>();
 
+
 export const saveTXonDB = async (save_data: ITxntmpData) => {
   const {
     isAlert,
@@ -106,21 +107,21 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
   const shortMint = mint.slice(0, 8) + '...';
   const shortTx = txHash ? txHash.slice(0, 8) + '...' : 'unknown';
 
-  // LAYER 1: In-memory check to avoid duplicate processing altogether
+  // In-memory check first (fastest)
   if (txHash && processedTransactions.has(txHash)) {
     logger.warn(`[🚫 MEMORY-DUPLICATE] ${shortMint} | Transaction ${shortTx} already processed in memory, skipping DB operation`);
     return null;
   }
-  
+
   try {
-    // LAYER 2: Explicit database check
+    // Database check
     if (txHash) {
       const existingTransaction = await SniperTxns.findOne({ txHash });
       
       if (existingTransaction) {
         logger.warn(`[⚠️ DB-DUPLICATE] ${shortMint} | Transaction ${shortTx} already exists in database, skipping save`);
         // Add to memory cache to prevent future attempts
-        if (txHash) processedTransactions.add(txHash);
+        processedTransactions.add(txHash);
         return existingTransaction;
       }
       
@@ -134,79 +135,69 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
     const tokenImage = data.image_uri || "UNKNOWN";
     const buyMC_usd = data.buyMC_usd || 0;
 
-    // LAYER 3: Use session with transaction for atomic operation
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
-    try {
-      // LAYER 4: Use findOneAndUpdate with upsert and strong write concern
-      const result = await SniperTxns.findOneAndUpdate(
-        { txHash }, 
-        {
-          $setOnInsert: {
-            txHash,
-            mint,
-            txTime: Date.now(),
-            tokenName,
-            tokenSymbol,
-            tokenImage,
-            swap,
-            swapPrice_usd: Number(swapPrice_usd),
-            swapAmount: Number(swapAmount),
-            swapFee_usd: Number(swapFee_usd),
-            swapMC_usd: Number(swapPrice_usd * TOTAL_SUPPLY),
-            swapProfit_usd: Number(swapProfit_usd),
-            swapProfitPercent_usd: Number(swapProfitPercent_usd),
-            buyMC_usd: Number(buyMC_usd),
-            dex,
-            date: Date.now()
-          }
-        },
-        { 
-          upsert: true,
-          new: true,
-          session,
-          writeConcern: { w: 'majority' } // Ensure write is acknowledged by majority of replicas
+    // SOLUTION: Remove transaction and use direct findOneAndUpdate with upsert
+    const result = await SniperTxns.findOneAndUpdate(
+      { txHash }, // Query
+      { // Update document
+        $setOnInsert: {
+          txHash,
+          mint,
+          txTime: Date.now(),
+          tokenName,
+          tokenSymbol,
+          tokenImage,
+          swap,
+          swapPrice_usd: Number(swapPrice_usd),
+          swapAmount: Number(swapAmount),
+          swapFee_usd: Number(swapFee_usd),
+          swapMC_usd: Number(swapPrice_usd * TOTAL_SUPPLY),
+          swapProfit_usd: Number(swapProfit_usd),
+          swapProfitPercent_usd: Number(swapProfitPercent_usd),
+          buyMC_usd: Number(buyMC_usd),
+          dex,
+          date: Date.now()
         }
-      );
-      
-      // Cache in memory immediately after successful DB write
-      if (txHash) processedTransactions.add(txHash);
-      
-      // Only create alert on new insertions
-      if (isAlert) {
-        const alertData: IAlertMsg = {
-          imageUrl: tokenImage,
-          title: tokenName,
-          content: "You just sold out this token.",
-          link: mint,
-          time: Date.now(),
-          isRead: false,
-        };
-        await createAlert(alertData);
+      },
+      { 
+        upsert: true, // Create if doesn't exist
+        new: true, // Return the updated document
+        runValidators: true // Run schema validators
+        // Remove writeConcern - that was causing the error
       }
-      
-      // Successfully commit the transaction
-      await session.commitTransaction();
-      session.endSession();
+    );
+
+    if (result) {
+      // Add to memory cache
+      if (txHash) processedTransactions.add(txHash);
       
       logger.info(`[💾 DB-SAVED] ${shortMint} | Transaction ${shortTx} saved successfully`);
       TokenAnalysis.updateCacheFromTransaction(result);
       
-      return result;
-    } catch (transactionError) {
-      // Abort transaction on error
-      await session.abortTransaction();
-      session.endSession();
-      throw transactionError; // Re-throw to be caught by outer catch
+      // Create alert if needed
+      if (isAlert) {
+        try {
+          const alertData: IAlertMsg = {
+            imageUrl: tokenImage,
+            title: tokenName,
+            content: "You just sold out this token.",
+            link: mint,
+            time: Date.now(),
+            isRead: false,
+          };
+          await createAlert(alertData);
+        } catch (error) {
+          logger.error(`[❌ ALERT-ERROR] Error creating alert: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
     }
-  } catch (err) {
-    // Specific handling for MongoDB duplicate key error
-    // Use type assertion to handle the unknown type
-    const error = err as any; // Type assertion to any
     
-    if (typeof error === 'object' && error !== null && 
-        error.name === 'MongoError' && error.code === 11000) {
+    return result;
+  } catch (err: unknown) {
+    // Type handling for errors
+    const error = err as any;
+    
+    // Check for duplicate key error
+    if (error && error.code === 11000) {
       logger.warn(`[⚠️ DB-DUPLICATE-ERROR] ${shortMint} | Duplicate key error for ${shortTx}`);
       // Add to memory cache to prevent future attempts
       if (txHash) processedTransactions.add(txHash);
