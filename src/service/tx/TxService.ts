@@ -200,9 +200,13 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
       session.endSession();
       throw transactionError; // Re-throw to be caught by outer catch
     }
-  } catch (error) {
+  } catch (err) {
     // Specific handling for MongoDB duplicate key error
-    if (error.name === 'MongoError' && error.code === 11000) {
+    // Use type assertion to handle the unknown type
+    const error = err as any; // Type assertion to any
+    
+    if (typeof error === 'object' && error !== null && 
+        error.name === 'MongoError' && error.code === 11000) {
       logger.warn(`[⚠️ DB-DUPLICATE-ERROR] ${shortMint} | Duplicate key error for ${shortTx}`);
       // Add to memory cache to prevent future attempts
       if (txHash) processedTransactions.add(txHash);
