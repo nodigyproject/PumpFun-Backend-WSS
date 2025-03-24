@@ -33,6 +33,7 @@ const tokenCreatedTime: Map<string, number> = new Map();
 const statusLogIntervals: Map<string, NodeJS.Timeout> = new Map();
 const tokenPriceData: Map<string, PriceData> = new Map();
 const pendingTransactions: Map<string, PendingTransaction[]> = new Map();
+const processedConfirmations = new Set<string>(); // NEW: Track which confirmations we've processed
 
 // REMOVED: tokenSellingLock map is removed to prevent locking tokens
 
@@ -1162,55 +1163,68 @@ private static async handlePoolAccountChange(
   /**
    * Process a transaction confirmation
    */
-  public static processTransactionConfirmation(mintAddress: string, txHash: string, success: boolean): void {
-    const shortMint = getTokenShortName(mintAddress);
-    
-    try {
-      this.setTransactionInProgress(mintAddress, false);
-      logger.info(`[✅ UNLOCKED] ${shortMint} `);
+
+
+// Then also modify your processTransactionConfirmation method:
+public static processTransactionConfirmation(mintAddress: string, txHash: string, success: boolean): void {
+  const shortMint = getTokenShortName(mintAddress);
+  const confirmationKey = `${mintAddress}_${txHash}`;
   
-      // Find the pending transaction
-      const pending = pendingTransactions.get(mintAddress) || [];
-      const transaction = pending.find(tx => tx.txHash === txHash);
-      
-      if (!transaction) {
-        logger.warn(`[⚠️ TX-WARNING] ${shortMint} | Transaction ${txHash.slice(0, 8)}... not found in pending list`);
-        return;
-      }
-      
-      if (success) {
-        logger.info(`[✅ TX-CONFIRMED] ${shortMint} | Transaction ${txHash.slice(0, 8)}... confirmed successfully`);
-        
-        // Update selling step if it was a step sell
-        if (transaction.sellStep !== undefined) {
-          const newStep = transaction.sellStep + 1;
-          tokenSellingStep.set(mintAddress, newStep);
-          logger.info(`[📊 STEP-UPDATE] ${shortMint} | Updated selling step to ${newStep}/4`);
-          
-          // Only stop monitoring if it's the final step (step 3 becomes step 4)
-          if (newStep >= 4) {
-            logger.info(`[🏁 FINAL-STEP] ${shortMint} | All steps completed, stopping monitoring`);
-            this.stopMonitoring(mintAddress);
-          } else {
-            logger.info(`[🔄 CONTINUE] ${shortMint} | Step ${newStep}/4 reached, continuing monitoring for next steps`);
-          }
-        }
-        // Only stop monitoring for stagnation sell, not for regular step sells
-        else if (transaction.isStagnationSell) {
-          logger.info(`[🏁 STAGNATION-SELL] ${shortMint} | Stagnation sell complete, stopping monitoring`);
-          this.stopMonitoring(mintAddress);
-        }
-      } else {
-        logger.error(`[❌ TX-FAILED] ${shortMint} | Transaction ${txHash.slice(0, 8)}... failed`);
-      }
-      
-      // Remove the transaction from pending list
-      this.removePendingTransaction(mintAddress, txHash);
-      
-    } catch (error) {
-      logger.error(`[❌ CONFIRM-ERROR] Error processing transaction confirmation for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  // CRITICAL: Check for duplicate confirmation processing
+  if (processedConfirmations.has(confirmationKey)) {
+    logger.warn(`[⚠️ DUPLICATE-CONFIRM] ${shortMint} | Already processed confirmation for ${txHash.slice(0, 8)}..., skipping`);
+    return;
   }
+  
+  // Add to memory immediately
+  processedConfirmations.add(confirmationKey);
+  
+  try {
+    this.setTransactionInProgress(mintAddress, false);
+    logger.info(`[✅ UNLOCKED] ${shortMint}`);
+
+    // Find the pending transaction
+    const pending = pendingTransactions.get(mintAddress) || [];
+    const transaction = pending.find(tx => tx.txHash === txHash);
+    
+    if (!transaction) {
+      logger.warn(`[⚠️ TX-WARNING] ${shortMint} | Transaction ${txHash.slice(0, 8)}... not found in pending list`);
+      return;
+    }
+    
+    if (success) {
+      logger.info(`[✅ TX-CONFIRMED] ${shortMint} | Transaction ${txHash.slice(0, 8)}... confirmed successfully`);
+      
+      // Update selling step if it was a step sell
+      if (transaction.sellStep !== undefined) {
+        const newStep = transaction.sellStep + 1;
+        tokenSellingStep.set(mintAddress, newStep);
+        logger.info(`[📊 STEP-UPDATE] ${shortMint} | Updated selling step to ${newStep}/4`);
+        
+        // Only stop monitoring if it's the final step (step 3 becomes step 4)
+        if (newStep >= 4) {
+          logger.info(`[🏁 FINAL-STEP] ${shortMint} | All steps completed, stopping monitoring`);
+          this.stopMonitoring(mintAddress);
+        } else {
+          logger.info(`[🔄 CONTINUE] ${shortMint} | Step ${newStep}/4 reached, continuing monitoring for next steps`);
+        }
+      }
+      // Only stop monitoring for stagnation sell, not for regular step sells
+      else if (transaction.isStagnationSell) {
+        logger.info(`[🏁 STAGNATION-SELL] ${shortMint} | Stagnation sell complete, stopping monitoring`);
+        this.stopMonitoring(mintAddress);
+      }
+    } else {
+      logger.error(`[❌ TX-FAILED] ${shortMint} | Transaction ${txHash.slice(0, 8)}... failed`);
+    }
+    
+    // Remove the transaction from pending list
+    this.removePendingTransaction(mintAddress, txHash);
+    
+  } catch (error) {
+    logger.error(`[❌ CONFIRM-ERROR] Error processing transaction confirmation for ${shortMint}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
   /**
    * Stop monitoring a token

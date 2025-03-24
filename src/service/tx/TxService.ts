@@ -87,8 +87,8 @@ export async function fetchTokenData(mint: string): Promise<any> {
 }
 
 // First, create an in-memory transaction cache at module level
+// First, create an in-memory transaction cache at module level
 const processedTransactions = new Set<string>();
-
 
 export const saveTXonDB = async (save_data: ITxntmpData) => {
   const {
@@ -107,10 +107,17 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
   const shortMint = mint.slice(0, 8) + '...';
   const shortTx = txHash ? txHash.slice(0, 8) + '...' : 'unknown';
 
-  // In-memory check first (fastest)
-  if (txHash && processedTransactions.has(txHash)) {
-    logger.warn(`[🚫 MEMORY-DUPLICATE] ${shortMint} | Transaction ${shortTx} already processed in memory, skipping DB operation`);
-    return null;
+  // CRITICAL: Add to memory cache IMMEDIATELY to block any parallel attempts
+  if (txHash) {
+    // If already processed, block immediately
+    if (processedTransactions.has(txHash)) {
+      logger.warn(`[🚫 MEMORY-DUPLICATE] ${shortMint} | Transaction ${shortTx} already processed in memory, skipping DB operation`);
+      return null;
+    }
+    
+    // Add to memory cache BEFORE database check
+    processedTransactions.add(txHash);
+    logger.info(`[🔒 MEMORY-LOCK] ${shortMint} | Added ${shortTx} to memory cache to prevent duplicates`);
   }
 
   try {
@@ -120,22 +127,19 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
       
       if (existingTransaction) {
         logger.warn(`[⚠️ DB-DUPLICATE] ${shortMint} | Transaction ${shortTx} already exists in database, skipping save`);
-        // Add to memory cache to prevent future attempts
-        processedTransactions.add(txHash);
         return existingTransaction;
       }
       
       logger.info(`[✅ DB-UNIQUE] ${shortMint} | Transaction ${shortTx} is unique, proceeding with save`);
     }
     
-    // Continue with normal save process
+    // Rest of your code is the same...
     const data = await fetchTokenData(mint);
     const tokenName = data.name || "UNKNOWN";
     const tokenSymbol = data.symbol || "UNKNOWN";
     const tokenImage = data.image_uri || "UNKNOWN";
     const buyMC_usd = data.buyMC_usd || 0;
 
-    // SOLUTION: Remove transaction and use direct findOneAndUpdate with upsert
     const result = await SniperTxns.findOneAndUpdate(
       { txHash }, // Query
       { // Update document
@@ -159,17 +163,13 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
         }
       },
       { 
-        upsert: true, // Create if doesn't exist
-        new: true, // Return the updated document
-        runValidators: true // Run schema validators
-        // Remove writeConcern - that was causing the error
+        upsert: true, 
+        new: true, 
+        runValidators: true
       }
     );
 
     if (result) {
-      // Add to memory cache
-      if (txHash) processedTransactions.add(txHash);
-      
       logger.info(`[💾 DB-SAVED] ${shortMint} | Transaction ${shortTx} saved successfully`);
       TokenAnalysis.updateCacheFromTransaction(result);
       
@@ -193,15 +193,10 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
     
     return result;
   } catch (err: unknown) {
-    // Type handling for errors
     const error = err as any;
     
-    // Check for duplicate key error
     if (error && error.code === 11000) {
       logger.warn(`[⚠️ DB-DUPLICATE-ERROR] ${shortMint} | Duplicate key error for ${shortTx}`);
-      // Add to memory cache to prevent future attempts
-      if (txHash) processedTransactions.add(txHash);
-      // Try to fetch and return the existing transaction
       return await SniperTxns.findOne({ txHash });
     }
     
@@ -209,7 +204,6 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
     return null;
   }
 };
-
 // Add periodic cleanup for the in-memory cache (optional)
 setInterval(() => {
   // Keep the set from growing indefinitely - clear older entries
