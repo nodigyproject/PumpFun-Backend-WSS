@@ -96,9 +96,23 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
     swapProfit_usd,
     swapProfitPercent_usd,
     dex,
-  } = save_data; //
+  } = save_data;
 
   try {
+    // Check for transaction hash uniqueness - prevent duplicates
+    if (txHash) {
+      const shortMint = mint.slice(0, 8) + '...';
+      const existingTransaction = await SniperTxns.findOne({ txHash: txHash });
+      
+      if (existingTransaction) {
+        logger.warn(`[⚠️ DB-DUPLICATE] ${shortMint} | Transaction ${txHash.slice(0, 8)}... already exists in database, skipping save`);
+        return existingTransaction; // Return existing record and skip saving
+      }
+      
+      logger.info(`[✅ DB-UNIQUE] ${shortMint} | Transaction ${txHash.slice(0, 8)}... is unique, proceeding with save`);
+    }
+    
+    // Continue with normal save process since no duplicate was found
     const data = await fetchTokenData(mint);
     const tokenName = data.name || "UNKNOWN";
     const tokenSymbol = data.symbol || "UNKNOWN";
@@ -123,27 +137,12 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
       dex: dex,
     });
 
-    await newTransaction.save();
-    TokenAnalysis.updateCacheFromTransaction(newTransaction);
-
-    // if(swap === "BUY") {
-    //   try {
-    //     const tokenData: Partial<IToken> = {
-    //       mint: mint,
-    //       tokenName: tokenName.toString(),
-    //       tokenSymbol: tokenSymbol.toString(),
-    //       tokenImage: tokenImage.toString(),
-    //       saveTime: Date.now()
-    //     };
+    const savedTransaction = await newTransaction.save();
+    logger.info(`[💾 DB-SAVED] ${mint.slice(0, 8)}... | Transaction ${txHash ? txHash.slice(0, 8) + '...' : 'unknown'} saved successfully`);
     
-    //     const newToken = new DBTokenList(tokenData);
-    //     await newToken.save();
-    //     logger.info(`New token saved: ${tokenSymbol}`);
-    //   } catch (error:any) {
-    //     logger.error(`Failed to save token: ${error.message}`);
-    //   }
-    // }
+    TokenAnalysis.updateCacheFromTransaction(savedTransaction);
 
+    // Create alert if needed
     if (isAlert) {
       try {
         const alertData: IAlertMsg = {
@@ -156,10 +155,14 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
         };
         await createAlert(alertData);
       } catch (error) {
-        console.log("Error saving alert on db: " + error);
+        logger.error(`[❌ ALERT-ERROR] Error creating alert: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+    
+    return savedTransaction;
   } catch (error) {
-    console.log("Error saving transaction on db: " + error);
+    const shortMint = mint.slice(0, 8) + '...';
+    logger.error(`[❌ DB-ERROR] ${shortMint} | Error saving transaction: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
   }
 };
