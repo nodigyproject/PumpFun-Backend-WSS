@@ -98,52 +98,70 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
     dex,
   } = save_data;
 
+  const shortMint = mint.slice(0, 8) + '...';
+  const shortTx = txHash ? txHash.slice(0, 8) + '...' : 'unknown';
+
   try {
-    // Check for transaction hash uniqueness - prevent duplicates
+    // Explicit check for existing transaction - this is more reliable than depending on the unique index
     if (txHash) {
-      const shortMint = mint.slice(0, 8) + '...';
       const existingTransaction = await SniperTxns.findOne({ txHash: txHash });
       
       if (existingTransaction) {
-        logger.warn(`[⚠️ DB-DUPLICATE] ${shortMint} | Transaction ${txHash.slice(0, 8)}... already exists in database, skipping save`);
-        return existingTransaction; // Return existing record and skip saving
+        logger.warn(`[⚠️ DB-DUPLICATE] ${shortMint} | Transaction ${shortTx} already exists in database, skipping save`);
+        return existingTransaction;
       }
       
-      logger.info(`[✅ DB-UNIQUE] ${shortMint} | Transaction ${txHash.slice(0, 8)}... is unique, proceeding with save`);
+      logger.info(`[✅ DB-UNIQUE] ${shortMint} | Transaction ${shortTx} is unique, proceeding with save`);
     }
     
-    // Continue with normal save process since no duplicate was found
+    // Continue with normal save process
     const data = await fetchTokenData(mint);
     const tokenName = data.name || "UNKNOWN";
     const tokenSymbol = data.symbol || "UNKNOWN";
     const tokenImage = data.image_uri || "UNKNOWN";
-    const buyMC_usd = data.buyMC_usd || 0; // this one is mc when swap, buy=swap_mc, sell-buy_mc
+    const buyMC_usd = data.buyMC_usd || 0;
 
-    const newTransaction = new SniperTxns({
-      txHash: txHash,
-      mint: mint,
-      txTime: Date.now(),
-      tokenName: tokenName,
-      tokenSymbol: tokenSymbol,
-      tokenImage: tokenImage,
-      swap: swap,
-      swapPrice_usd: Number(swapPrice_usd),
-      swapAmount: Number(swapAmount),
-      swapFee_usd: Number(swapFee_usd),
-      swapMC_usd: Number(swapPrice_usd * TOTAL_SUPPLY),
-      swapProfit_usd: Number(swapProfit_usd),
-      swapProfitPercent_usd: Number(swapProfitPercent_usd),
-      buyMC_usd: Number(buyMC_usd),
-      dex: dex,
-    });
+    // Use findOneAndUpdate with upsert for atomic operation (prevents race conditions)
+    const result = await SniperTxns.findOneAndUpdate(
+      { txHash }, // Query
+      { // Update document
+        $setOnInsert: {
+          txHash,
+          mint,
+          txTime: Date.now(),
+          tokenName,
+          tokenSymbol,
+          tokenImage,
+          swap,
+          swapPrice_usd: Number(swapPrice_usd),
+          swapAmount: Number(swapAmount),
+          swapFee_usd: Number(swapFee_usd),
+          swapMC_usd: Number(swapPrice_usd * TOTAL_SUPPLY),
+          swapProfit_usd: Number(swapProfit_usd),
+          swapProfitPercent_usd: Number(swapProfitPercent_usd),
+          buyMC_usd: Number(buyMC_usd),
+          dex,
+          date: Date.now()
+        }
+      },
+      { 
+        upsert: true, // Create if doesn't exist
+        new: true, // Return the updated document
+        runValidators: true // Run schema validators
+      }
+    );
 
-    const savedTransaction = await newTransaction.save();
-    logger.info(`[💾 DB-SAVED] ${mint.slice(0, 8)}... | Transaction ${txHash ? txHash.slice(0, 8) + '...' : 'unknown'} saved successfully`);
+    const isNewRecord = !result?.date || result?.date === Date.now();
     
-    TokenAnalysis.updateCacheFromTransaction(savedTransaction);
+    if (isNewRecord) {
+      logger.info(`[💾 DB-SAVED] ${shortMint} | Transaction ${shortTx} saved successfully`);
+      TokenAnalysis.updateCacheFromTransaction(result);
+    } else {
+      logger.info(`[⚠️ DB-EXISTING] ${shortMint} | Transaction ${shortTx} already existed, returned existing record`);
+    }
 
     // Create alert if needed
-    if (isAlert) {
+    if (isAlert && isNewRecord) {
       try {
         const alertData: IAlertMsg = {
           imageUrl: tokenImage,
@@ -159,9 +177,17 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
       }
     }
     
-    return savedTransaction;
+    return result;
+    
   } catch (error) {
-    const shortMint = mint.slice(0, 8) + '...';
+    // Log specific details for duplicate key errors
+    if (error.name === 'MongoError' && error.code === 11000) {
+      logger.warn(`[⚠️ DB-DUPLICATE-ERROR] ${shortMint} | Duplicate key error for ${shortTx}`);
+      // Try to fetch and return the existing transaction
+      const existingTx = await SniperTxns.findOne({ txHash });
+      return existingTx;
+    }
+    
     logger.error(`[❌ DB-ERROR] ${shortMint} | Error saving transaction: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
