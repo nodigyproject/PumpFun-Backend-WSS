@@ -5,6 +5,8 @@ import { TokenAnalysis } from "../assets/tokenAnalysisService";
 import { TOTAL_SUPPLY } from "../../utils/constants";
 import { sniperService } from "../sniper/sniperService";
 import { createAlert } from "../alarm/alarm";
+import mongoose from "mongoose";
+
 import { IToken, DBTokenList } from "../../models/TokenList";
 // import { io } from "../..";
 
@@ -84,6 +86,9 @@ export async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
+// First, create an in-memory transaction cache at module level
+const processedTransactions = new Set<string>();
+
 export const saveTXonDB = async (save_data: ITxntmpData) => {
   const {
     isAlert,
@@ -101,13 +106,21 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
   const shortMint = mint.slice(0, 8) + '...';
   const shortTx = txHash ? txHash.slice(0, 8) + '...' : 'unknown';
 
+  // LAYER 1: In-memory check to avoid duplicate processing altogether
+  if (txHash && processedTransactions.has(txHash)) {
+    logger.warn(`[🚫 MEMORY-DUPLICATE] ${shortMint} | Transaction ${shortTx} already processed in memory, skipping DB operation`);
+    return null;
+  }
+  
   try {
-    // Explicit check for existing transaction - this is more reliable than depending on the unique index
+    // LAYER 2: Explicit database check
     if (txHash) {
-      const existingTransaction = await SniperTxns.findOne({ txHash: txHash });
+      const existingTransaction = await SniperTxns.findOne({ txHash });
       
       if (existingTransaction) {
         logger.warn(`[⚠️ DB-DUPLICATE] ${shortMint} | Transaction ${shortTx} already exists in database, skipping save`);
+        // Add to memory cache to prevent future attempts
+        if (txHash) processedTransactions.add(txHash);
         return existingTransaction;
       }
       
@@ -121,48 +134,47 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
     const tokenImage = data.image_uri || "UNKNOWN";
     const buyMC_usd = data.buyMC_usd || 0;
 
-    // Use findOneAndUpdate with upsert for atomic operation (prevents race conditions)
-    const result = await SniperTxns.findOneAndUpdate(
-      { txHash }, // Query
-      { // Update document
-        $setOnInsert: {
-          txHash,
-          mint,
-          txTime: Date.now(),
-          tokenName,
-          tokenSymbol,
-          tokenImage,
-          swap,
-          swapPrice_usd: Number(swapPrice_usd),
-          swapAmount: Number(swapAmount),
-          swapFee_usd: Number(swapFee_usd),
-          swapMC_usd: Number(swapPrice_usd * TOTAL_SUPPLY),
-          swapProfit_usd: Number(swapProfit_usd),
-          swapProfitPercent_usd: Number(swapProfitPercent_usd),
-          buyMC_usd: Number(buyMC_usd),
-          dex,
-          date: Date.now()
-        }
-      },
-      { 
-        upsert: true, // Create if doesn't exist
-        new: true, // Return the updated document
-        runValidators: true // Run schema validators
-      }
-    );
-
-    const isNewRecord = !result?.date || result?.date === Date.now();
+    // LAYER 3: Use session with transaction for atomic operation
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (isNewRecord) {
-      logger.info(`[💾 DB-SAVED] ${shortMint} | Transaction ${shortTx} saved successfully`);
-      TokenAnalysis.updateCacheFromTransaction(result);
-    } else {
-      logger.info(`[⚠️ DB-EXISTING] ${shortMint} | Transaction ${shortTx} already existed, returned existing record`);
-    }
-
-    // Create alert if needed
-    if (isAlert && isNewRecord) {
-      try {
+    try {
+      // LAYER 4: Use findOneAndUpdate with upsert and strong write concern
+      const result = await SniperTxns.findOneAndUpdate(
+        { txHash }, 
+        {
+          $setOnInsert: {
+            txHash,
+            mint,
+            txTime: Date.now(),
+            tokenName,
+            tokenSymbol,
+            tokenImage,
+            swap,
+            swapPrice_usd: Number(swapPrice_usd),
+            swapAmount: Number(swapAmount),
+            swapFee_usd: Number(swapFee_usd),
+            swapMC_usd: Number(swapPrice_usd * TOTAL_SUPPLY),
+            swapProfit_usd: Number(swapProfit_usd),
+            swapProfitPercent_usd: Number(swapProfitPercent_usd),
+            buyMC_usd: Number(buyMC_usd),
+            dex,
+            date: Date.now()
+          }
+        },
+        { 
+          upsert: true,
+          new: true,
+          session,
+          writeConcern: { w: 'majority' } // Ensure write is acknowledged by majority of replicas
+        }
+      );
+      
+      // Cache in memory immediately after successful DB write
+      if (txHash) processedTransactions.add(txHash);
+      
+      // Only create alert on new insertions
+      if (isAlert) {
         const alertData: IAlertMsg = {
           imageUrl: tokenImage,
           title: tokenName,
@@ -172,23 +184,43 @@ export const saveTXonDB = async (save_data: ITxntmpData) => {
           isRead: false,
         };
         await createAlert(alertData);
-      } catch (error) {
-        logger.error(`[❌ ALERT-ERROR] Error creating alert: ${error instanceof Error ? error.message : String(error)}`);
       }
+      
+      // Successfully commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+      
+      logger.info(`[💾 DB-SAVED] ${shortMint} | Transaction ${shortTx} saved successfully`);
+      TokenAnalysis.updateCacheFromTransaction(result);
+      
+      return result;
+    } catch (transactionError) {
+      // Abort transaction on error
+      await session.abortTransaction();
+      session.endSession();
+      throw transactionError; // Re-throw to be caught by outer catch
     }
-    
-    return result;
-    
   } catch (error) {
-    // Log specific details for duplicate key errors
+    // Specific handling for MongoDB duplicate key error
     if (error.name === 'MongoError' && error.code === 11000) {
       logger.warn(`[⚠️ DB-DUPLICATE-ERROR] ${shortMint} | Duplicate key error for ${shortTx}`);
+      // Add to memory cache to prevent future attempts
+      if (txHash) processedTransactions.add(txHash);
       // Try to fetch and return the existing transaction
-      const existingTx = await SniperTxns.findOne({ txHash });
-      return existingTx;
+      return await SniperTxns.findOne({ txHash });
     }
     
     logger.error(`[❌ DB-ERROR] ${shortMint} | Error saving transaction: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 };
+
+// Add periodic cleanup for the in-memory cache (optional)
+setInterval(() => {
+  // Keep the set from growing indefinitely - clear older entries
+  // This assumes you don't need to remember transactions older than 1 hour
+  if (processedTransactions.size > 1000) {
+    logger.info(`[🧹 CACHE-CLEANUP] Clearing in-memory transaction cache (size: ${processedTransactions.size})`);
+    processedTransactions.clear();
+  }
+}, 3600000); // Clean up once per hour
