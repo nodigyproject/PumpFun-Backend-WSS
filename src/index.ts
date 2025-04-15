@@ -5,7 +5,7 @@ import { validateJWT } from "./middleware/auth";
 import routes from "./routes";
 import logger from "./logs/logger";
 import { config, START_TXT, wallet } from "./config";
-import { sniperService } from "./service/sniper/sniperService";
+import { sniperService } from "./service/sniper/sniperService_update";
 import { sellMonitorService } from "./service/sniper/sellMonitorService";
 import { createServer } from "http";
 import { startBalanceMonitor } from "./service/sniper/getWalletBalance";
@@ -34,32 +34,24 @@ server.use((req, res, next) => {
 
 server.use(`/api/${config.apiVersion}`, routes);
 
-const startServer = () => {
+const startServer = async () => {
   /********* db **************/
-  mongoose
-    .connect(config.mongoUri)
-    .then(() => {
-      logger.info(START_TXT.db);
-    })
-    .catch((error) => {
-      logger.critical(`MongoDB connection error: ${error.message}`);
-      process.exit(1);
-    });
-    
+  await mongoose.connect(config.mongoUri);
+
   httpServer.listen(config.serverPort, async () => {
     logger.clearLogs();
     logger.info(`${START_TXT.server} ${config.serverPort}`);
-    
+
     // Start the wallet balance monitor
     startBalanceMonitor();
-    
+
     // Always start the sniper service (for buying tokens)
     sniperService();
-    
+
     // Choose the appropriate sell monitoring service based on configuration
     // if (USE_WSS) {
-      logger.info("🌐 Using WebSocket-based token monitoring service");
-      WssMonitorService.initialize();
+    // logger.info("🌐 Using WebSocket-based token monitoring service");
+    // WssMonitorService.initialize();
     // } else {
     //   logger.info("⏱️ Using interval-based token monitoring service");
     //   sellMonitorService();
@@ -72,9 +64,9 @@ process.on("uncaughtException", async (error) => {
   logger.critical(`Uncaught Exception: ${error.message}`);
 
   // Stop WebSocket monitoring if active
-  if (USE_WSS) {
-    WssMonitorService.stopAllMonitoring();
-  }
+  // if (USE_WSS) {
+  //   WssMonitorService.stopAllMonitoring();
+  // }
 
   await new Promise((resolve) => httpServer.close(resolve));
 
@@ -90,12 +82,12 @@ process.on("uncaughtException", async (error) => {
 // Graceful shutdown on SIGTERM
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  
+
   // Stop WebSocket monitoring if active
-  if (USE_WSS) {
-    WssMonitorService.stopAllMonitoring();
-  }
-  
+  // if (USE_WSS) {
+  //   WssMonitorService.stopAllMonitoring();
+  // }
+
   await new Promise((resolve) => httpServer.close(resolve));
   await mongoose.connection.close();
   process.exit(0);
@@ -104,12 +96,12 @@ process.on('SIGTERM', async () => {
 // Graceful shutdown on SIGINT (Ctrl+C)
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
-  
+
   // Stop WebSocket monitoring if active
   if (USE_WSS) {
     WssMonitorService.stopAllMonitoring();
   }
-  
+
   await new Promise((resolve) => httpServer.close(resolve));
   await mongoose.connection.close();
   process.exit(0);

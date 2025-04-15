@@ -35,7 +35,9 @@ export const X_API_KEY: string = process.env.X_API_KEY || "";
 
 export const connection = new Connection(SOLANA_RPC_URL, {
   wsEndpoint: WSS_URL,
+  commitment: "processed"
 });
+
 export const metaplex = new Metaplex(connection);
 
 export const wallet = Keypair.fromSecretKey(bs58.decode(PRIVATE_KEY));

@@ -1,1 +1,1 @@
-## Solana PumpFun sniper bot test
+## Solana PumpFun sniper bot
