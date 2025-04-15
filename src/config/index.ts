@@ -34,8 +34,7 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 export const X_API_KEY: string = process.env.X_API_KEY || "";
 
 export const connection = new Connection(SOLANA_RPC_URL, {
-  wsEndpoint: WSS_URL,
-  commitment: "processed"
+  wsEndpoint: WSS_URL
 });
 
 export const metaplex = new Metaplex(connection);
