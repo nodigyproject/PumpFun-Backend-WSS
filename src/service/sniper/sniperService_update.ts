@@ -300,7 +300,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
         let value = structure.decode(tokenAccount!.data);
         const virtualTokenReserves = BigInt(value.virtualTokenReserves);
-        const virtualSolReserves = BigInt(value.virtualSolReserves);4
+        const virtualSolReserves = BigInt(value.virtualSolReserves); 4
         const realTokenReserves = BigInt(value.realTokenReserves);
 
         console.log('virtualTokenReserves = ', virtualTokenReserves);
@@ -677,8 +677,8 @@ async function subscribeCommand(client: Client, args: SubscribeRequest) {
 
 export const sniperService = () => {
   const client = new Client(
-    'https://grpc.eu.shyft.to',
-    '6ab1f2e8-2bf8-4066-a49a-03ff869dbe40',
+    process.env.GRPC_URL,
+    process.env.X_TOKEN,
     undefined,
   );
 
