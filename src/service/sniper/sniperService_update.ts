@@ -677,8 +677,8 @@ async function subscribeCommand(client: Client, args: SubscribeRequest) {
 
 export const sniperService = () => {
   const client = new Client(
-    process.env.GRPC_URL,
-    process.env.X_TOKEN,
+    process.env.GRPC_URL || '',
+    process.env.X_TOKEN || '',
     undefined,
   );
 
