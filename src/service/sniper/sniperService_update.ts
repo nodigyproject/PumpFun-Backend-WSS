@@ -379,44 +379,40 @@ async function handleStream(client: Client, args: SubscribeRequest) {
         const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
         if (result) {
           const txSignature = base58.encode(versionedTx.signatures[0]);
-          const swapInfo = await getSwapInfo(connection, txSignature);
-          console.log('buy info = ', swapInfo);
-          if (swapInfo) {
-            const solAmount = swapInfo.solAmount;
-            const tokenAmount = swapInfo.tokenAmount;
+          const solAmount = await getSwapSolAmount(connection, txSignature);
+          console.log('buy sol amount = ', solAmount);
 
-            const result = await SniperTxns.findOneAndUpdate(
-              { txHash: txSignature }, // Query
-              { // Update document
-                $setOnInsert: {
-                  txHash: txSignature,
-                  mint,
-                  txTime: Date.now(),
-                  tokenName,
-                  tokenSymbol,
-                  tokenImage,
-                  swap: "BUY",
-                  swapPrice_usd: (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(tokenAmount) / 1000000),
-                  swapAmount: Number(tokenAmount) / 1000000,
-                  swapFee_usd: jito_tip,
-                  swapMC_usd: marketCapSol,
-                  swapProfit_usd: 0,
-                  swapProfitPercent_usd: 0,
-                  buyMC_usd: marketCapSol,
-                  dex: "Pumpfun",
-                  date: Date.now()
-                }
-              },
-              {
-                upsert: true,
-                new: true,
-                runValidators: true
+
+          const result = await SniperTxns.findOneAndUpdate(
+            { txHash: txSignature }, // Query
+            { // Update documents
+              $setOnInsert: {
+                txHash: txSignature,
+                mint,
+                txTime: Date.now(),
+                tokenName,
+                tokenSymbol,
+                tokenImage,
+                swap: "BUY",
+                swapPrice_usd: (solAmount / LAMPORTS_PER_SOL) / (Number(buyTokenAmount) / 1000000),
+                swapAmount: Number(buyTokenAmount) / 1000000,
+                swapFee_usd: jito_tip,
+                swapMC_usd: marketCapSol,
+                swapProfit_usd: 0,
+                swapProfitPercent_usd: 0,
+                buyMC_usd: marketCapSol,
+                dex: "Pumpfun",
+                date: Date.now()
               }
-            );
+            },
+            {
+              upsert: true,
+              new: true,
+              runValidators: true
+            }
+          );
 
-            console.log('save trnasactino data = ', result);
-          }
-
+          console.log('save trnasactino data = ', result);
 
           // sell start
           const botSellConfig = SniperBotConfig.getSellConfig();
@@ -481,28 +477,27 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             if ((marketCapSol_now / marketCapSol * 100 - 100) < marketcap_change && ((Date.now() - start_time) / 1000) > marketcap_duration) {
               console.log(`>>>>>>>>>>> marketcap not change ${marketcap_change}% for ${marketcap_duration} seconds`);
               //sell all remain tokens
-              const swapInfo = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
-
-              console.log('sell info : ', swapInfo);
+              const signature = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
 
               // save trx to db
-              if (swapInfo) {
+              if (signature) {
+                const solAmount = await getSwapSolAmount(connection, signature);
                 const result = await SniperTxns.findOneAndUpdate(
-                  { txHash: swapInfo.txSignature }, // Query
+                  { txHash: signature }, // Query
                   { // Update document
                     $setOnInsert: {
-                      txHash: swapInfo.txSignature,
+                      txHash: signature,
                       mint,
                       txTime: Date.now(),
                       tokenName,
                       tokenSymbol,
                       tokenImage,
                       swap: "SELL",
-                      swapPrice_usd: (Number(swapInfo.solAmount) / LAMPORTS_PER_SOL) / (Number(swapInfo.tokenAmount) / 1000000),
-                      swapAmount: Number(swapInfo.tokenAmount) / 1000000,
+                      swapPrice_usd: (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000),
+                      swapAmount: Number(remain_amount) / 1000000,
                       swapFee_usd: jito_tip,
                       swapMC_usd: marketCapSol_now,
-                      swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(swapInfo.tokenAmount) / 1000000),
+                      swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(remain_amount) / 1000000),
                       swapProfitPercent_usd: (marketCapSol_now / marketCapSol * 100 - 100),
                       buyMC_usd: marketCapSol,
                       dex: "Pumpfun",
@@ -532,26 +527,26 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             if (revenue < (-1) * botSellConfig.lossExitPercent) {
               // sell all remain tokens
               console.log('stop loss sell');
-              const swapInfo = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
-              console.log('sell swap info = ', swapInfo);
+              const signature = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
               // save trx to db
-              if (swapInfo) {
+              if (signature) {
+                const solAmount = await getSwapSolAmount(connection, signature);
                 const result = await SniperTxns.findOneAndUpdate(
-                  { txHash: swapInfo.txSignature }, // Query
+                  { txHash: signature }, // Query
                   { // Update document
                     $setOnInsert: {
-                      txHash: swapInfo.txSignature,
+                      txHash: signature,
                       mint,
                       txTime: Date.now(),
                       tokenName,
                       tokenSymbol,
                       tokenImage,
                       swap: "SELL",
-                      swapPrice_usd: (Number(swapInfo.solAmount) / LAMPORTS_PER_SOL) / (Number(swapInfo.tokenAmount) / 1000000),
-                      swapAmount: Number(swapInfo.tokenAmount) / 1000000,
+                      swapPrice_usd: (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000),
+                      swapAmount: Number(remain_amount) / 1000000,
                       swapFee_usd: jito_tip,
                       swapMC_usd: marketCapSol_now,
-                      swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(swapInfo.tokenAmount) / 1000000),
+                      swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(remain_amount) / 1000000),
                       swapProfitPercent_usd: (marketCapSol_now / marketCapSol * 100 - 100),
                       buyMC_usd: marketCapSol,
                       dex: "Pumpfun",
@@ -586,26 +581,27 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                 } else {
                   amount = Math.floor(Number(buyTokenAmount) * (sell_amounts[i] - soldAmount) / 100);
                 }
-                const swapInfo = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip);
-                if (swapInfo) {
+                const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip);
+                if (signature) {
+                  const solAmount = await getSwapSolAmount(connection, signature);
                   soldAmount = sell_amounts[i];
                   remain_amount = remain_amount - amount;
                   const result = await SniperTxns.findOneAndUpdate(
-                    { txHash: swapInfo.txSignature }, // Query
+                    { txHash: signature }, // Query
                     { // Update document
                       $setOnInsert: {
-                        txHash: swapInfo.txSignature,
+                        txHash: signature,
                         mint,
                         txTime: Date.now(),
                         tokenName,
                         tokenSymbol,
                         tokenImage,
                         swap: "SELL",
-                        swapPrice_usd: (Number(swapInfo.solAmount) / LAMPORTS_PER_SOL) / (Number(swapInfo.tokenAmount) / 1000000),
-                        swapAmount: Number(swapInfo.tokenAmount) / 1000000,
+                        swapPrice_usd: (solAmount / LAMPORTS_PER_SOL) / (Number(amount) / 1000000),
+                        swapAmount: Number(amount) / 1000000,
                         swapFee_usd: jito_tip,
                         swapMC_usd: marketCapSol_now,
-                        swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(swapInfo.tokenAmount) / 1000000),
+                        swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(amount) / 1000000),
                         swapProfitPercent_usd: (marketCapSol_now / marketCapSol * 100 - 100),
                         buyMC_usd: marketCapSol,
                         dex: "Pumpfun",
@@ -857,200 +853,36 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
   if (result) {
     console.log('sell sucess');
     const txSignature = base58.encode(versionedTx.signatures[0]);
-    const swapInfo = await getSwapInfo(connection, txSignature);
-    console.log('sell swap info  = ', swapInfo);
-    if (swapInfo)
-      return { ...swapInfo, txSignature };
-    else
-      return null;
+    return txSignature;
   } else {
     console.log('sell failed');
     return null;
   }
 }
 
-export async function getTokenAddressFromTokenAccount(connection: Connection, tokenAccountAddress: string) {
-  try {
-    const tokenAccountPubkey = new PublicKey(tokenAccountAddress);
-    const accountInfo = await connection.getAccountInfo(tokenAccountPubkey);
-
-    if (accountInfo === null) {
-      throw new Error('Token account not found');
-    }
-
-    const accountData = spl.AccountLayout.decode(accountInfo.data);
-    const mintAddress = new PublicKey(accountData.mint);
-
-    // console.log(`Token address (mint address) for token account ${tokenAccountAddress}: ${mintAddress.toBase58()}`);
-    return mintAddress.toBase58();
-  } catch (error) {
-    console.error('Error fetching token address:', error);
-    return null;
-  }
-}
-
-export const getSwapInfo = async (connection: Connection, signature: string) => {
+export const getSwapSolAmount = async (connection: Connection, signature: string) => {
   try {
     let tx: any;
     let i = 0;
     let retry = 100;
     while (i < retry) {
+      console.log(`[getSwapSolAmount] parse transaction : ${tx}`);
       tx = await connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
       if (tx != null && tx != undefined)
         break;
       await sleep(100);
       i++;
     }
-    // const blocktime = tx?.blockTime;
-    const instructions = tx!.transaction.message.instructions;
-    const innerinstructions = tx!.meta!.innerInstructions;
-    // const accountKeys = tx?.transaction.message.accountKeys.map((ak: any) => ak.pubkey);
-    const logs = tx?.meta?.logMessages;
-
-    let isSwap;
-    let dex;
-    let tokenAddress;
-    let solAmount;
-    let tokenAmount;
-    let type;
-
-    for (let i = 0; i < logs!.length; i++) {
-      if (logs![i].includes('Program 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8 invoke')) { // raydium
-        isSwap = true;
-        dex = 'raydium';
-        // check instructions of raydium swap
-        for (let i = 0; i < instructions.length; i++) {
-          if (instructions[i].programId.toBase58() == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
-            for (let j = 0; j < innerinstructions!.length; j++) {
-              if (innerinstructions![j].index === i) {
-
-                const [sendToken, receiveToken] = await Promise.all([
-                  getTokenAddressFromTokenAccount(connection, (innerinstructions![j].instructions[0] as any).parsed.info.destination),
-                  getTokenAddressFromTokenAccount(connection, (innerinstructions![j].instructions[1] as any).parsed.info.source)
-                ]);
-
-                const sendAmount = (innerinstructions![j].instructions[0] as any).parsed.info.amount;
-                const receiveAmount = (innerinstructions![j].instructions[1] as any).parsed.info.amount;
-
-                if (sendToken == 'So11111111111111111111111111111111111111112') {
-                  type = "buy";
-                  tokenAddress = receiveToken;
-                  solAmount = Number(sendAmount);
-                  tokenAmount = Number(receiveAmount);
-                } else if (receiveToken == 'So11111111111111111111111111111111111111112') {
-                  type = "sell";
-                  tokenAddress = sendToken;
-                  solAmount = Number(receiveAmount);
-                  tokenAmount = Number(sendAmount);
-                }
-                return { isSwap, dex, type, tokenAddress, solAmount, tokenAmount };
-              }
-            }
-          }
-        }
-
-        // check inner instructions of raydium swap
-        for (let i = 0; i < innerinstructions!.length; i++) {
-          const instructions = innerinstructions![i].instructions;
-          for (let j = 0; j < instructions.length; j++) {
-            if (instructions[j].programId.toBase58() == '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8') {
-              const [sendToken, receiveToken] = await Promise.all([
-                getTokenAddressFromTokenAccount(connection, (instructions[j + 1] as any).parsed.info.destination),
-                getTokenAddressFromTokenAccount(connection, (instructions[j + 2] as any).parsed.info.source)
-              ])
-              const sendAmount = (instructions[j + 1] as any).parsed.info.amount;
-              const receiveAmount = (instructions[j + 2] as any).parsed.info.amount;
-              if (sendToken == 'So11111111111111111111111111111111111111112') {
-                type = "buy";
-                tokenAddress = receiveToken;
-                solAmount = Number(sendAmount);
-                tokenAmount = Number(receiveAmount);
-              } else if (receiveToken == 'So11111111111111111111111111111111111111112') {
-                type = "sell";
-                tokenAddress = sendToken;
-                solAmount = Number(receiveAmount);
-                tokenAmount = Number(sendAmount);
-              }
-              return { isSwap, dex, type, tokenAddress, solAmount, tokenAmount };
-            }
-          }
-        }
-      } else if (logs![i].includes('Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P invoke')) {// pumpfun swap
-        isSwap = true;
-        dex = 'pumpfun';
-        if (logs![i + 1] == 'Program log: Instruction: Sell') {
-          type = 'sell';
-          // check instructions
-          for (let i = 0; i < instructions.length; i++) {
-            if (instructions[i].programId.toBase58() == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
-              for (let j = 0; j < innerinstructions!.length; j++) {
-                if (innerinstructions![j].index === i) {
-                  const tokenAddress = await getTokenAddressFromTokenAccount(connection, (innerinstructions![j].instructions[0] as any).parsed.info.destination);
-                  const tokenAmount = Number((innerinstructions![j].instructions[0] as any).parsed.info.amount);
-                  const data = (innerinstructions![j].instructions[1] as any).data;
-                  const bytedata = base58.decode(data);
-                  const hexString = (bytedata as any).toString("hex");
-                  const solAmountBytes = hexString.substring(48 * 2, 56 * 2);
-                  const reversedSolAmountBytes = solAmountBytes.match(/.{1,2}/g)!.reverse().join("");
-                  const solAmount = Number("0x" + reversedSolAmountBytes);
-                  return { isSwap, dex, type, tokenAddress, solAmount, tokenAmount };
-                }
-              }
-            }
-          }
-
-          // check inner instructions
-          for (let i = 0; i < innerinstructions!.length; i++) {
-            const instructions = innerinstructions![i].instructions;
-            for (let j = 0; j < instructions.length; j++) {
-              if (instructions[j].programId.toBase58() == '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') {
-                const tokenAddress = await getTokenAddressFromTokenAccount(connection, (instructions[j + 1] as any).parsed.info.destination);
-                const tokenAmount = Number((instructions[j + 1] as any).parsed.info.amount);
-                const data = (instructions[j + 2] as any).data;
-                const bytedata = base58.decode(data);
-                const hexString = (bytedata as any).toString("hex");
-                const solAmountBytes = hexString.substring(48 * 2, 56 * 2);
-                const reversedSolAmountBytes = solAmountBytes.match(/.{1,2}/g)!.reverse().join("");
-                const solAmount = Number("0x" + reversedSolAmountBytes);
-                return { isSwap, dex, type, tokenAddress, solAmount, tokenAmount };
-              }
-            }
-          }
-        } else if (logs![i + 1] == 'Program log: Instruction: Buy') {
-          type = 'buy';
-          // check instructions
-          for (let i = 0; i < instructions.length; i++) {
-            if (instructions[i].programId.toBase58() == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
-              for (let j = 0; j < innerinstructions!.length; j++) {
-                if (innerinstructions![j].index === i) {
-                  const tokenAmount = Number((innerinstructions![j].instructions[0] as any).parsed.info.amount);
-                  const tokenAddress = await getTokenAddressFromTokenAccount(connection, (innerinstructions![j].instructions[0] as any).parsed.info.source);
-                  const solAmount = Number((innerinstructions![j].instructions[1] as any).parsed.info.lamports);
-                  return { isSwap, dex, type, tokenAddress, solAmount, tokenAmount };
-                }
-              }
-            }
-          }
-
-          // check inner instructions
-          for (let i = 0; i < innerinstructions!.length; i++) {
-            const instructions = innerinstructions![i].instructions;
-            for (let j = 0; j < instructions.length; j++) {
-              if (instructions[j].programId.toBase58() == '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') {
-                const tokenAmount = Number((instructions[j + 1] as any).parsed.info.amount);
-                const tokenAddress = await getTokenAddressFromTokenAccount(connection, (instructions[j + 1] as any).parsed.info.source);
-                const solAmount = Number((instructions[j + 2] as any).parsed.info.lamports);
-                return { isSwap, dex, type, tokenAddress, solAmount, tokenAmount };
-              }
-            }
-          }
-        }
-      }
-    }
-    return null;
+    const deltaBalances = tx.meta.postBalances.map((item: number, index: number) => {
+      return item - tx.meta.preBalances[index]
+    })
+    const filter = deltaBalances.filter((item: number) => {
+      return item != 0
+    })
+    return filter[filter.length - 1] / LAMPORTS_PER_SOL;
   } catch (error) {
-    console.log('solana.ts getSwapInfo error: ', error);
-    return null;
+    console.log('getSwapSolAmount Error: ', error);
+    return 0;
   }
 }
 export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
