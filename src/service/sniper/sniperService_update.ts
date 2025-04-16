@@ -481,6 +481,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               //sell all remain tokens
               const swapInfo = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
 
+              console.log('sell info : ', swapInfo);
+
               // save trx to db
               if (swapInfo) {
                 const result = await SniperTxns.findOneAndUpdate(
@@ -854,6 +856,7 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
     console.log('sell sucess');
     const txSignature = base58.encode(versionedTx.signatures[0]);
     const swapInfo = await getSwapInfo(connection, txSignature);
+    console.log('sell swap info  = ', swapInfo);
     if (swapInfo)
       return { ...swapInfo, txSignature };
     else
