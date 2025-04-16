@@ -20,7 +20,7 @@ export async function fetchLastValidBlockhash() {
 }
 
 // Keep fetching the last valid blockhash every 100ms
-setInterval(fetchLastValidBlockhash, config.lastBlock_Update_cycle);
+// setInterval(fetchLastValidBlockhash, config.lastBlock_Update_cycle);
 
 export function getLastValidBlockhash(): string {
   return lastValidBlockhash;
