@@ -106,8 +106,10 @@ async function handleStream(client: Client, args: SubscribeRequest) {
   // Handle updates
   stream.on("data", async (data: any) => {
     try {
-      if (processing)
+      if (processing) {
+        console.log('token processing');
         return;
+      }
       processing = true;
       // 1. check bot running status
       if (!isRunning()) {
