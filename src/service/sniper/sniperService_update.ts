@@ -379,9 +379,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
         const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
         if (result) {
           const txSignature = base58.encode(versionedTx.signatures[0]);
-          const solAmount = await getSwapSolAmount(connection, txSignature);
-          console.log('buy sol amount = ', solAmount);
-
+          const investSolAmount = await getSwapSolAmount(connection, txSignature);
+          console.log('buy sol amount = ', investSolAmount);
+          const buyPrice = (investSolAmount / LAMPORTS_PER_SOL) / (Number(buyTokenAmount) / 1000000);
 
           const result = await SniperTxns.findOneAndUpdate(
             { txHash: txSignature }, // Query
@@ -394,7 +394,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                 tokenSymbol,
                 tokenImage,
                 swap: "BUY",
-                swapPrice_usd: (solAmount / LAMPORTS_PER_SOL) / (Number(buyTokenAmount) / 1000000),
+                swapPrice_usd: buyPrice,
                 swapAmount: Number(buyTokenAmount) / 1000000,
                 swapFee_usd: jito_tip,
                 swapMC_usd: marketCapSol,
@@ -482,6 +482,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               // save trx to db
               if (signature) {
                 const solAmount = await getSwapSolAmount(connection, signature);
+                const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
+                const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
+                const swapProfitPercent = swapProfit / investSolAmount * 100;
                 const result = await SniperTxns.findOneAndUpdate(
                   { txHash: signature }, // Query
                   { // Update document
@@ -493,12 +496,12 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                       tokenSymbol,
                       tokenImage,
                       swap: "SELL",
-                      swapPrice_usd: (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000),
+                      swapPrice_usd: sellPrice,
                       swapAmount: Number(remain_amount) / 1000000,
                       swapFee_usd: jito_tip,
                       swapMC_usd: marketCapSol_now,
-                      swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(remain_amount) / 1000000),
-                      swapProfitPercent_usd: (marketCapSol_now / marketCapSol * 100 - 100),
+                      swapProfit_usd: swapProfit,
+                      swapProfitPercent_usd: swapProfitPercent,
                       buyMC_usd: marketCapSol,
                       dex: "Pumpfun",
                       date: Date.now()
@@ -531,6 +534,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               // save trx to db
               if (signature) {
                 const solAmount = await getSwapSolAmount(connection, signature);
+                const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
+                const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
+                const swapProfitPercent = swapProfit / investSolAmount * 100;
                 const result = await SniperTxns.findOneAndUpdate(
                   { txHash: signature }, // Query
                   { // Update document
@@ -542,12 +548,12 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                       tokenSymbol,
                       tokenImage,
                       swap: "SELL",
-                      swapPrice_usd: (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000),
+                      swapPrice_usd: sellPrice,
                       swapAmount: Number(remain_amount) / 1000000,
                       swapFee_usd: jito_tip,
                       swapMC_usd: marketCapSol_now,
-                      swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(remain_amount) / 1000000),
-                      swapProfitPercent_usd: (marketCapSol_now / marketCapSol * 100 - 100),
+                      swapProfit_usd: swapProfit,
+                      swapProfitPercent_usd: swapProfitPercent,
                       buyMC_usd: marketCapSol,
                       dex: "Pumpfun",
                       date: Date.now()
@@ -586,6 +592,10 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   const solAmount = await getSwapSolAmount(connection, signature);
                   soldAmount = sell_amounts[i];
                   remain_amount = remain_amount - amount;
+                  const sellPrice = (solAmount / LAMPORTS_PER_SOL) / (Number(amount) / 1000000);
+                  const swapProfit = (sellPrice - buyPrice) * (Number(amount) / 1000000);
+                  const swapProfitPercent = swapProfit / investSolAmount * 100;
+
                   const result = await SniperTxns.findOneAndUpdate(
                     { txHash: signature }, // Query
                     { // Update document
@@ -597,12 +607,12 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                         tokenSymbol,
                         tokenImage,
                         swap: "SELL",
-                        swapPrice_usd: (solAmount / LAMPORTS_PER_SOL) / (Number(amount) / 1000000),
+                        swapPrice_usd: sellPrice,
                         swapAmount: Number(amount) / 1000000,
                         swapFee_usd: jito_tip,
                         swapMC_usd: marketCapSol_now,
-                        swapProfit_usd: (Number(marketCapSol_now - marketCapSol) / 1000000000) * (Number(amount) / 1000000),
-                        swapProfitPercent_usd: (marketCapSol_now / marketCapSol * 100 - 100),
+                        swapProfit_usd: swapProfit,
+                        swapProfitPercent_usd: swapProfitPercent,
                         buyMC_usd: marketCapSol,
                         dex: "Pumpfun",
                         date: Date.now()
@@ -645,6 +655,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
     } catch (error) {
       if (error) {
       }
+      processing = false;
     }
   });
 
