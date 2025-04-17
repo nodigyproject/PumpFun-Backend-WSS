@@ -877,7 +877,7 @@ export const getSwapSolAmount = async (connection: Connection, signature: string
     let i = 0;
     let retry = 100;
     while (i < retry) {
-      console.log(`[getSwapSolAmount] parse transaction : ${tx}`);
+      console.log(`[getSwapSolAmount] parse transaction : ${signature}`);
       tx = await connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
       if (tx != null && tx != undefined)
         break;

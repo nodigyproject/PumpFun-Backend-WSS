@@ -49,7 +49,8 @@ router.get("/", async (req, res) => {
 
     const updatedData = await Promise.all(
       paginatedData.map(async (item) => {
-        const currentMC_usd = await getCurrentUSDMC(item.mint);
+        // const currentMC_usd = await getCurrentUSDMC(item.mint);
+        const currentMC_usd = 0;
         let cacheData = {
           tokenName: item.tokenName,
           tokenSymbol: item.tokenSymbol,
