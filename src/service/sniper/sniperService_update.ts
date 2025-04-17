@@ -890,7 +890,7 @@ export const getSwapSolAmount = async (connection: Connection, signature: string
     const filter = deltaBalances.filter((item: number) => {
       return item != 0
     })
-    return filter[filter.length - 1] / LAMPORTS_PER_SOL;
+    return filter[filter.length - 1];
   } catch (error) {
     console.log('getSwapSolAmount Error: ', error);
     return 0;
