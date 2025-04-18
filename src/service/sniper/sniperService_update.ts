@@ -471,8 +471,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             let n = (buyTokenAmount * virtualSolReserves) / (virtualTokenReserves + buyTokenAmount);
             let a = (n * 100n) / 10000n;
             const outSolAmount = Number(n - a) / LAMPORTS_PER_SOL;
-            let revenue = outSolAmount / buySolAmount * 100 - 100;
-            console.log(`revenue = ${revenue} %`);
+            let revenue = outSolAmount / investSolAmount * 100 - 100;
+            console.log(`==========> revenue = ${revenue} %`);
 
             // check marketcap change 
             const marketCapSol_now = Number(virtualSolReserves) / (Number(virtualTokenReserves) / 1000000)
@@ -526,8 +526,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   isRead: false,
                 };
                 await createAlert(alertData);
+                break;
               }
-              break;
             }
 
             // stop loss
@@ -580,8 +580,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   isRead: false,
                 };
                 await createAlert(alertData);
+                break;
               }
-              break;
             }
 
             // check revenue levels
@@ -593,6 +593,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                 } else {
                   amount = Math.floor(Number(buyTokenAmount) * (sell_amounts[i] - soldAmount) / 100);
                 }
+                console.log('sell revenue = ', sell_amounts[i]);
                 const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip);
                 if (signature) {
                   const solAmount = await getSwapSolAmount(connection, signature);
@@ -641,8 +642,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                     isRead: false,
                   };
                   await createAlert(alertData);
+                  break;
                 }
-                break;
               }
             }
 
@@ -650,7 +651,6 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               console.log('all token sold');
               break;
             }
-
             await sleep(500);
           }
           processing = false;
@@ -788,7 +788,7 @@ export async function sendBundle(
     console.log("Checking bundle's status...", bundleIds);
     const sentTime = Date.now();
     let confirmed = false;
-    while (Date.now() - sentTime < 30000) {
+    while (Date.now() - sentTime < 10000) {
 
       try {
         const { data } = await axios.post(`https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles`,
@@ -898,7 +898,7 @@ export const getSwapSolAmount = async (connection: Connection, signature: string
     const filter = deltaBalances.filter((item: number) => {
       return item != 0
     })
-    return filter[filter.length - 1];
+    return Math.abs(filter[filter.length - 1]);
   } catch (error) {
     console.log('getSwapSolAmount Error: ', error);
     return 0;
