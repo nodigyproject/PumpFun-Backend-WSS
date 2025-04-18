@@ -106,17 +106,19 @@ async function handleStream(client: Client, args: SubscribeRequest) {
   // Handle updates
   stream.on("data", async (data: any) => {
     try {
-      if (processing) {
-        console.log('token processing');
-        return;
-      }
-      processing = true;
+
       // 1. check bot running status
       if (!isRunning()) {
-        console.log('Bot is not running now!');
+        // console.log('Bot is not running now!');
         processing = false;
         return;
       }
+
+      if (processing) {
+        // console.log('token processing');
+        return;
+      }
+      processing = true;
 
       // 2. check bot working time
       if (!isWorkingTime()) {
@@ -484,7 +486,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                 const solAmount = await getSwapSolAmount(connection, signature);
                 const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
                 const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
-                const swapProfitPercent = swapProfit / investSolAmount * 100;
+                const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
+                console.log('swapProfit = ', swapProfit);
+                console.log('swapProfitPercent = ', swapProfitPercent);
                 const result = await SniperTxns.findOneAndUpdate(
                   { txHash: signature }, // Query
                   { // Update document
@@ -536,7 +540,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                 const solAmount = await getSwapSolAmount(connection, signature);
                 const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
                 const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
-                const swapProfitPercent = swapProfit / investSolAmount * 100;
+                const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
+                console.log('swapProfit = ', swapProfit);
+                console.log('swapProfitPercent = ', swapProfitPercent);
                 const result = await SniperTxns.findOneAndUpdate(
                   { txHash: signature }, // Query
                   { // Update document
@@ -594,7 +600,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   remain_amount = remain_amount - amount;
                   const sellPrice = (solAmount / LAMPORTS_PER_SOL) / (Number(amount) / 1000000);
                   const swapProfit = (sellPrice - buyPrice) * (Number(amount) / 1000000);
-                  const swapProfitPercent = swapProfit / investSolAmount * 100;
+                  const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
+                  console.log('swapProfit = ', swapProfit);
+                  console.log('swapProfitPercent = ', swapProfitPercent);
 
                   const result = await SniperTxns.findOneAndUpdate(
                     { txHash: signature }, // Query
