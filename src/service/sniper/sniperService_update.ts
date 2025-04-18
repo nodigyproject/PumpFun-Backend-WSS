@@ -474,6 +474,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             let revenue = outSolAmount / investSolAmount * 100 - 100;
             console.log(`==========> revenue = ${revenue} %`);
 
+            if (revenue < -90) // invalid value
+              continue;
+
             // check marketcap change 
             const marketCapSol_now = Number(virtualSolReserves) / (Number(virtualTokenReserves) / 1000000)
             if ((marketCapSol_now / marketCapSol * 100 - 100) < marketcap_change && ((Date.now() - start_time) / 1000) > marketcap_duration) {
