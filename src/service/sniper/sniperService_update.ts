@@ -445,7 +445,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   console.log(`[${mint}] MarketCap Not Change ${marketcap_change}% for ${marketcap_duration} seconds, So Selling ...`);
 
                   //sell all remain tokens
-                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
+                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
 
                   // save trx to db
                   if (confirmed && signature) {
@@ -511,7 +511,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   // sell all remain tokens
                   console.log(`[${mint}] Stop Loss Selling ... Current Revenue: ${revenue}%, StopLoss Setting: ${botSellConfig.lossExitPercent}%`);
 
-                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
+                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
 
                   if (confirmed && signature) {
 
@@ -580,7 +580,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                     }
                     // console.log('sell revenue = ', sell_amounts[i]);
 
-                    const { confirmed, signature } = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip);
+                    const { confirmed, signature } = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
 
                     if (confirmed && signature) {
 
@@ -664,7 +664,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
       }
 
       monitor();
-      
+
     } catch (error) {
       if (error) {
       }
