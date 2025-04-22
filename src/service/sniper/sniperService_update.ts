@@ -285,6 +285,10 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           // 2. check market cap
           const bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
+          if (!bondingCurveStatus) {
+            console.log(`[${mint}] getBondingCurveStatus Failed. Skip!`);
+            return;
+          }
 
           const marketCapSol = Number(bondingCurveStatus.virtualSolReserves) / (Number(bondingCurveStatus.virtualTokenReserves) / 1000000)
 
@@ -355,9 +359,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
 
-          if (confirmed && signature) {
-            // const txSignature = base58.encode(versionedTx.signatures[0]);
-            const investSolAmount = await getSwapSolAmount(connection, signature);
+          if (confirmed) {
+            const txSignature = base58.encode(versionedTx.signatures[0]);
+            const investSolAmount = await getSwapSolAmount(connection, txSignature);
             console.log(`[${mint}] Buy Amount: ${investSolAmount / LAMPORTS_PER_SOL} SOL`);
             const buyPrice = (investSolAmount / LAMPORTS_PER_SOL) / (Number(buyTokenAmount) / 1000000);
 
@@ -430,6 +434,12 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
                 const currentStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
 
+                if (!currentStatus) {
+                  console.log(`[${mint}] Sell Monitoring getBondingCurveStatus Error, Retry`);
+                  await sleep(500);
+                  continue;
+                }
+
                 let n = (buyTokenAmount * currentStatus.virtualSolReserves) / (currentStatus.virtualTokenReserves + buyTokenAmount);
                 let a = (n * 100n) / 10000n;
                 const outSolAmount = Number(n - a);
@@ -445,10 +455,10 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   console.log(`[${mint}] MarketCap Not Change ${marketcap_change}% for ${marketcap_duration} seconds, So Selling ...`);
 
                   //sell all remain tokens
-                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
+                  const signature = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
 
                   // save trx to db
-                  if (confirmed && signature) {
+                  if (signature) {
 
                     console.log(`[${mint}] MC Not Change Selling Success.`)
                     const solAmount = await getSwapSolAmount(connection, signature);
@@ -511,9 +521,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   // sell all remain tokens
                   console.log(`[${mint}] Stop Loss Selling ... Current Revenue: ${revenue}%, StopLoss Setting: ${botSellConfig.lossExitPercent}%`);
 
-                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
+                  const signature = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
 
-                  if (confirmed && signature) {
+                  if (signature) {
 
                     console.log(`[${mint}] Stop Loss Selling Success.`);
                     const solAmount = await getSwapSolAmount(connection, signature);
@@ -580,7 +590,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                     }
                     // console.log('sell revenue = ', sell_amounts[i]);
 
-                    const { confirmed, signature } = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
+                    const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
 
                     if (confirmed && signature) {
 
@@ -700,30 +710,35 @@ async function subscribeCommand(client: Client, args: SubscribeRequest) {
 }
 
 const getBondingCurveStatus = async (connection: Connection, bondingCurve: PublicKey) => {
+  try {
+    const tokenAccount = await connection.getAccountInfo(
+      bondingCurve,
+      "processed"
+    );
 
-  const tokenAccount = await connection.getAccountInfo(
-    bondingCurve,
-    "processed"
-  );
+    const structure = struct([
+      u64("discriminator"),
+      u64("virtualTokenReserves"),
+      u64("virtualSolReserves"),
+      u64("realTokenReserves"),
+      u64("realSolReserves"),
+      u64("tokenTotalSupply"),
+      bool("complete"),
+    ]);
 
-  const structure = struct([
-    u64("discriminator"),
-    u64("virtualTokenReserves"),
-    u64("virtualSolReserves"),
-    u64("realTokenReserves"),
-    u64("realSolReserves"),
-    u64("tokenTotalSupply"),
-    bool("complete"),
-  ]);
+    let value = structure.decode(tokenAccount!.data);
 
-  let value = structure.decode(tokenAccount!.data);
+    const virtualTokenReserves = BigInt(value.virtualTokenReserves);
+    const virtualSolReserves = BigInt(value.virtualSolReserves);
+    const realSolReserves = BigInt(value.realSolReserves);
+    const realTokenReserves = BigInt(value.realTokenReserves);
 
-  const virtualTokenReserves = BigInt(value.virtualTokenReserves);
-  const virtualSolReserves = BigInt(value.virtualSolReserves);
-  const realSolReserves = BigInt(value.realSolReserves);
-  const realTokenReserves = BigInt(value.realTokenReserves);
+    return { realSolReserves, realTokenReserves, virtualSolReserves, virtualTokenReserves };
 
-  return { realSolReserves, realTokenReserves, virtualSolReserves, virtualTokenReserves };
+  } catch (error) {
+    console.log(`getBondingCurveStatus Error: ${error}`);
+    return null;
+  }
 }
 
 export const sniperService = () => {
@@ -996,7 +1011,12 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
   //   console.log('sell failed');
   //   return null;
   // }
-  return result;
+  if (result.confirmed) {
+    const signature = base58.encode(versionedTx.signatures[0]);
+    return signature;
+  } else {
+    return null;
+  }
 }
 
 export const getSwapSolAmount = async (connection: Connection, signature: string) => {
