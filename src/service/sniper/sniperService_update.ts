@@ -40,7 +40,8 @@ const provider = new AnchorProvider(connection, new NodeWallet(new Keypair()), {
 });
 const pumpfun_program = new Program<PumpFun>(IDL as PumpFun, provider);
 
-let processing = false;
+let lastProcessTime = 0;
+const MIN_TOKEN_PROCESS_INTERVAL = 1000;
 
 interface SubscribeRequest {
   accounts: { [key: string]: SubscribeRequestFilterAccounts };
@@ -107,23 +108,21 @@ async function handleStream(client: Client, args: SubscribeRequest) {
   stream.on("data", async (data: any) => {
     try {
 
+      const now = Date.now();
+      if (now - lastProcessTime < MIN_TOKEN_PROCESS_INTERVAL) {
+        return;
+      }
+      lastProcessTime = now;
+
       // 1. check bot running status
       if (!isRunning()) {
-        // console.log('Bot is not running now!');
-        processing = false;
+        console.log('Bot is not running.');
         return;
       }
-
-      if (processing) {
-        // console.log('token processing');
-        return;
-      }
-      processing = true;
 
       // 2. check bot working time
       if (!isWorkingTime()) {
-        console.log('Not working Time');
-        processing = false;
+        console.log('Bot is not in working time.');
         return;
       }
 
@@ -156,18 +155,16 @@ async function handleStream(client: Client, args: SubscribeRequest) {
         });
 
         console.log('Bot stopped due to low sol balanace');
-        processing = false;
         return;
       }
 
       const result = tOutPut(data);
-
       const mint = result.meta.postTokenBalances[0].mint;
-      console.log('New Token : ', mint);
+      // console.log(`New Token : `, mint);
       // const signature = result.signature;
       // console.log('signature = ', signature);
       const dev = result.message.accountKeys[0];
-      console.log('Dev wallet : ', dev);
+      // console.log('Dev wallet : ', dev);
       const bondingCurve = result.message.accountKeys[2];
       // console.log('bondingCurve = ', bondingCurve);
       const associatedBondingCurve = result.message.accountKeys[3];
@@ -179,7 +176,6 @@ async function handleStream(client: Client, args: SubscribeRequest) {
       const devBuySetting = SniperBotConfig.getMaxDevBuyAmount();
       if (devBuySetting.enabled && devBuySol > devBuySetting.value) {
         console.log(`dev buy amount exceeds limit amount, so skip this token ${mint}`);
-        processing = false;
         return;
       }
 
@@ -204,7 +200,6 @@ async function handleStream(client: Client, args: SubscribeRequest) {
         });
         if (duplicateToken) {
           console.log(`duplicated token symbol ${tokenSymbol}, so skip this token ${mint}`);
-          processing = false;
           return;
         }
       }
@@ -232,7 +227,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           // 1. check token age
           let min_age = 0;
-          let max_age = 30; // default 30 seconds
+          let max_age = 60; // default 30 seconds
 
           if (botBuyConfig.age.enabled) {
             min_age = botBuyConfig.age.start;
@@ -243,13 +238,12 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           if (age < min_age) {
             setTimeout(monitor, monitor_cycle); // token is too young, so check again after monitor cycle
-            console.log(`token ${mint} is too young, so check again after monitor cycle ${monitor_cycle} seconds`)
+            console.log(`[${mint}] is too young, Min Age: ${min_age}`);
             return;
           }
 
           if (age > max_age) {
-            console.log(`token ${mint} is too old, so skip this token`);
-            processing = false;
+            console.log(`[${mint}] is too old, Max Age: ${max_age}`);
             return;
           }
 
@@ -258,9 +252,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             let ata = spl.getAssociatedTokenAddressSync(new PublicKey(mint), new PublicKey(dev));
             const balance = await connection.getTokenAccountBalance(ata, "processed");
             const devHoldingPercent = Number(balance.value.uiAmount) / 10000000;
-            console.log(`devHolding Rate = ${devHoldingPercent} %`);
             if (devHoldingPercent > botBuyConfig.maxDevHoldingAmount.value) {
-              console.log(`dev toke holdings exceeds max limit, so check again after monitor cycle ${monitor_cycle}`);
+              console.log(`[${mint}] Dev Holding Amount: ${devHoldingPercent} %. Max Setting: ${botBuyConfig.maxDevHoldingAmount.value}%`);
               setTimeout(monitor, monitor_cycle);
               return;
             }
@@ -272,75 +265,53 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             if (data && data[0]) {
               const volume = data[0].volume.h1;
               const txns = data[0].txns.h1.buys + data[0].txns.h1.sells;
-              console.log('volume = ', volume);
-              console.log('txns = ', txns);
+              // console.log('volume = ', volume);
+              // console.log('txns = ', txns);
+
               if (botBuyConfig.lastHourVolume.enabled && volume < botBuyConfig.lastHourVolume.value) {
-                console.log(`last hour volume is so small, so check again after monitor cycle ${monitor_cycle}`);
+                console.log(`[${mint}] 1 hour Volumes: ${volume}. Min Setting Volumes: ${botBuyConfig.lastHourVolume.value}`);
                 setTimeout(monitor, monitor_cycle);
                 return;
               }
+
               if (botBuyConfig.lastMinuteTxns.enabled && txns < botBuyConfig.lastMinuteTxns.value) {
-                console.log(`last hour txns is so small, so check again after monitor cycle ${monitor_cycle}`);
+                console.log(`[${mint}] 1 hour Txns: ${txns}, Min Setting Transactions: ${botBuyConfig.lastMinuteTxns.value}`);
                 setTimeout(monitor, monitor_cycle);
                 return;
               }
+
             }
           }
 
           // 2. check market cap
-          const tokenAccount = await connection.getAccountInfo(
-            new PublicKey(bondingCurve),
-            "processed"
-          );
-          console.log('tokenAccount = ', tokenAccount);
+          const bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
 
-          const structure = struct([
-            u64("discriminator"),
-            u64("virtualTokenReserves"),
-            u64("virtualSolReserves"),
-            u64("realTokenReserves"),
-            u64("realSolReserves"),
-            u64("tokenTotalSupply"),
-            bool("complete"),
-          ]);
-
-          let value = structure.decode(tokenAccount!.data);
-          const virtualTokenReserves = BigInt(value.virtualTokenReserves);
-          const virtualSolReserves = BigInt(value.virtualSolReserves); 4
-          const realTokenReserves = BigInt(value.realTokenReserves);
-
-          console.log('virtualTokenReserves = ', virtualTokenReserves);
-          console.log('virtualSolReserves = ', virtualSolReserves);
-          console.log('realTokenReserves = ', realTokenReserves);
-
-          const marketCapSol = Number(virtualSolReserves) / (Number(virtualTokenReserves) / 1000000)
+          const marketCapSol = Number(bondingCurveStatus.virtualSolReserves) / (Number(bondingCurveStatus.virtualTokenReserves) / 1000000)
 
           if (botBuyConfig.marketCap.enabled && (marketCapSol < botBuyConfig.marketCap.min || marketCapSol > botBuyConfig.marketCap.max)) {
-            console.log('marketCapSol = ', marketCapSol);
-            console.log('bot config min marketCapSol = ', botBuyConfig.marketCap.min);
-            console.log('bot config max marketCapSol = ', botBuyConfig.marketCap.max);
-
-            console.log(`outside of marketcap range, so check again after monitor cycle`);
+            console.log(`[${mint}] Outside of allowed MarketCap Range. Current MC: ${marketCapSol} SOL, Min MC: ${botBuyConfig.marketCap.min} SOL, Max MC: ${botBuyConfig.marketCap.max}`);
             setTimeout(monitor, monitor_cycle);
             return;
           }
 
           // buy
           const jito_tip = botBuyConfig.jitoTipAmount;
-          console.log('jitoTipAmount = ', jito_tip);
+          // console.log('jitoTipAmount = ', jito_tip);
           const slippage = botBuyConfig.slippage;
-          console.log('slippage = ', slippage);
+          // console.log('slippage = ', slippage);
           const buySolAmount = botBuyConfig.investmentPerToken;
-          console.log('buyAmount = ', buySolAmount);
-          // calcuate buy token amount
-          let n = virtualSolReserves * virtualTokenReserves;
-          let i = virtualSolReserves + BigInt(buySolAmount * LAMPORTS_PER_SOL);
+          // console.log('buyAmount = ', buySolAmount);
+
+          // Calcuate buy token amount
+          let n = bondingCurveStatus.virtualSolReserves * bondingCurveStatus.virtualTokenReserves;
+          let i = bondingCurveStatus.virtualSolReserves + BigInt(buySolAmount * LAMPORTS_PER_SOL);
           let r = n / i + 1n;
-          let s = virtualTokenReserves - r;
-          const buyTokenAmount = s < realTokenReserves ? s : realTokenReserves;
-          console.log('buyTokenAmount = ', buyTokenAmount);
+          let s = bondingCurveStatus.virtualTokenReserves - r;
+          const buyTokenAmount = s < bondingCurveStatus.realTokenReserves ? s : bondingCurveStatus.realTokenReserves;
+          // console.log('buyTokenAmount = ', buyTokenAmount);
+
           const buySolAmountWithSlippage = BigInt(buySolAmount * LAMPORTS_PER_SOL) * (100n + BigInt(slippage)) / 100n;
-          console.log('buySolAmountWithSlippage = ', buySolAmountWithSlippage);
+          // console.log('buySolAmountWithSlippage = ', buySolAmountWithSlippage);
 
           // make transaction and send 
           const associatedUser = await spl.getAssociatedTokenAddress(new PublicKey(mint), wallet.publicKey, false);
@@ -379,18 +350,22 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           const versionedTx = new VersionedTransaction(messageV0);
           versionedTx.sign([wallet]);
-          const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
-          if (result) {
-            const txSignature = base58.encode(versionedTx.signatures[0]);
-            const investSolAmount = await getSwapSolAmount(connection, txSignature);
-            console.log('buy sol amount = ', investSolAmount);
+
+          // const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
+
+          const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
+
+          if (confirmed && signature) {
+            // const txSignature = base58.encode(versionedTx.signatures[0]);
+            const investSolAmount = await getSwapSolAmount(connection, signature);
+            console.log(`[${mint}] Buy Amount: ${investSolAmount / LAMPORTS_PER_SOL} SOL`);
             const buyPrice = (investSolAmount / LAMPORTS_PER_SOL) / (Number(buyTokenAmount) / 1000000);
 
             const result = await SniperTxns.findOneAndUpdate(
-              { txHash: txSignature }, // Query
+              { txHash: signature }, // Query
               { // Update documents
                 $setOnInsert: {
-                  txHash: txSignature,
+                  txHash: signature,
                   mint,
                   txTime: Date.now(),
                   tokenName,
@@ -415,10 +390,11 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               }
             );
 
-            console.log('save trnasactino data = ', result);
+            console.log(`[${mint}] Save Buy Transaction: ${result}`);
 
-            // sell start
+            // Sell start
             const botSellConfig = SniperBotConfig.getSellConfig();
+
             const sell_rules = botSellConfig.saleRules.filter((item) => {
               return item.percent > 0
             });
@@ -435,8 +411,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               sell_amounts[i] = sell_amount;
             }
 
-            console.log('revenues = ', revenues);
-            console.log('sell_amounts = ', sell_amounts);
+            // console.log('revenues = ', revenues);
+            // console.log('sell_amounts = ', sell_amounts);
 
             let soldAmount = 0; // 0%
             let remain_amount = Number(buyTokenAmount);
@@ -444,55 +420,44 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             const marketcap_change = botSellConfig.mcChange.percentValue;
             const marketcap_duration = botSellConfig.mcChange.duration;
 
-            console.log('marketcap_change = ', marketcap_change);
-            console.log('marketcap_duration = ', marketcap_duration);
+            // console.log('marketcap_change = ', marketcap_change);
+            // console.log('marketcap_duration = ', marketcap_duration);
 
             let start_time = Date.now();
+
             while (true) {
               try {
-                const tokenAccount = await connection.getAccountInfo(
-                  new PublicKey(bondingCurve),
-                  "processed"
-                );
 
-                const structure = struct([
-                  u64("discriminator"),
-                  u64("virtualTokenReserves"),
-                  u64("virtualSolReserves"),
-                  u64("realTokenReserves"),
-                  u64("realSolReserves"),
-                  u64("tokenTotalSupply"),
-                  bool("complete"),
-                ]);
+                const currentStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
 
-                let value = structure.decode(tokenAccount!.data);
-                const virtualTokenReserves = BigInt(value.virtualTokenReserves);
-                const virtualSolReserves = BigInt(value.virtualSolReserves);
-
-                let n = (buyTokenAmount * virtualSolReserves) / (virtualTokenReserves + buyTokenAmount);
+                let n = (buyTokenAmount * currentStatus.virtualSolReserves) / (currentStatus.virtualTokenReserves + buyTokenAmount);
                 let a = (n * 100n) / 10000n;
                 const outSolAmount = Number(n - a);
-                let revenue = outSolAmount / investSolAmount * 100 - 100;
-                console.log(`==========> revenue = ${revenue} %`);
 
-                if (revenue < -90) // invalid value
-                  continue;
+                let revenue = outSolAmount / investSolAmount * 100 - 100;
+                console.log(`[${mint}] Revenue: ${revenue} %`);
 
                 // check marketcap change 
-                const marketCapSol_now = Number(virtualSolReserves) / (Number(virtualTokenReserves) / 1000000)
+                const marketCapSol_now = Number(currentStatus.virtualSolReserves) / (Number(currentStatus.virtualTokenReserves) / 1000000)
+
                 if ((marketCapSol_now / marketCapSol * 100 - 100) < marketcap_change && ((Date.now() - start_time) / 1000) > marketcap_duration) {
-                  console.log(`>>>>>>>>>>> marketcap not change ${marketcap_change}% for ${marketcap_duration} seconds`);
+
+                  console.log(`[${mint}] MarketCap Not Change ${marketcap_change}% for ${marketcap_duration} seconds, So Selling ...`);
+
                   //sell all remain tokens
-                  const signature = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
+                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
 
                   // save trx to db
-                  if (signature) {
+                  if (confirmed && signature) {
+
+                    console.log(`[${mint}] MC Not Change Selling Success.`)
                     const solAmount = await getSwapSolAmount(connection, signature);
                     const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
                     const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
                     const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
-                    console.log('swapProfit = ', swapProfit);
-                    console.log('swapProfitPercent = ', swapProfitPercent);
+                    // console.log('swapProfit = ', swapProfit);
+                    // console.log('swapProfitPercent = ', swapProfitPercent);
+
                     const result = await SniperTxns.findOneAndUpdate(
                       { txHash: signature }, // Query
                       { // Update document
@@ -521,6 +486,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                         runValidators: true
                       }
                     );
+
+                    console.log(`[${mint}] Save Sell Transaction: ${result}`);
+
                     const alertData: IAlertMsg = {
                       imageUrl: tokenImage,
                       title: tokenName,
@@ -529,24 +497,31 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                       time: Date.now(),
                       isRead: false,
                     };
+
                     await createAlert(alertData);
+
                     break;
+                  } else {
+                    console.log(`[${mint}] MC Not Change Selling Failed.`);
                   }
                 }
 
-                // stop loss
+                // Check Stop Loss
                 if (revenue < (-1) * botSellConfig.lossExitPercent) {
                   // sell all remain tokens
-                  console.log('stop loss sell');
-                  const signature = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
-                  // save trx to db
-                  if (signature) {
+                  console.log(`[${mint}] Stop Loss Selling ... Current Revenue: ${revenue}%, StopLoss Setting: ${botSellConfig.lossExitPercent}%`);
+
+                  const { confirmed, signature } = await sell(mint, BigInt(remain_amount), associatedBondingCurve, associatedUser, jito_tip);
+
+                  if (confirmed && signature) {
+
+                    console.log(`[${mint}] Stop Loss Selling Success.`);
                     const solAmount = await getSwapSolAmount(connection, signature);
                     const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
                     const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
                     const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
-                    console.log('swapProfit = ', swapProfit);
-                    console.log('swapProfitPercent = ', swapProfitPercent);
+                    // console.log('swapProfit = ', swapProfit);
+                    // console.log('swapProfitPercent = ', swapProfitPercent);
                     const result = await SniperTxns.findOneAndUpdate(
                       { txHash: signature }, // Query
                       { // Update document
@@ -575,6 +550,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                         runValidators: true
                       }
                     );
+                    console.log(`[${mint}] Save Stop Loss Selling Transaction: ${result}`);
+
                     const alertData: IAlertMsg = {
                       imageUrl: tokenImage,
                       title: tokenName,
@@ -583,31 +560,40 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                       time: Date.now(),
                       isRead: false,
                     };
+
                     await createAlert(alertData);
                     break;
+                  } else {
+                    console.log(`[${mint}] Stop Loss Selling Failed.`);
                   }
                 }
 
                 // check revenue levels
                 for (let i = revenues.length - 1; i >= 0; i--) {
                   if (revenue > revenues[i] && sell_amounts[i] > soldAmount) {
+                    console.log(`[${mint}] Reached Revenue Step ${i + 1}. Selling ${sell_amounts[i] - soldAmount}% ...`);
                     let amount = 0;
                     if (sell_amounts[i] == 100) {
                       amount = Number(remain_amount);
                     } else {
                       amount = Math.floor(Number(buyTokenAmount) * (sell_amounts[i] - soldAmount) / 100);
                     }
-                    console.log('sell revenue = ', sell_amounts[i]);
-                    const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip);
-                    if (signature) {
+                    // console.log('sell revenue = ', sell_amounts[i]);
+
+                    const { confirmed, signature } = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip);
+
+                    if (confirmed && signature) {
+
+                      console.log(`[${mint}] Revenue Selling Success.`);
+
                       const solAmount = await getSwapSolAmount(connection, signature);
                       soldAmount = sell_amounts[i];
                       remain_amount = remain_amount - amount;
                       const sellPrice = (solAmount / LAMPORTS_PER_SOL) / (Number(amount) / 1000000);
                       const swapProfit = (sellPrice - buyPrice) * (Number(amount) / 1000000);
                       const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
-                      console.log('swapProfit = ', swapProfit);
-                      console.log('swapProfitPercent = ', swapProfitPercent);
+                      // console.log('swapProfit = ', swapProfit);
+                      // console.log('swapProfitPercent = ', swapProfitPercent);
 
                       const result = await SniperTxns.findOneAndUpdate(
                         { txHash: signature }, // Query
@@ -637,6 +623,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                           runValidators: true
                         }
                       );
+
+                      console.log(`[${mint}] Save Revenue Selling Transaction: ${result}`);
+
                       const alertData: IAlertMsg = {
                         imageUrl: tokenImage,
                         title: tokenName,
@@ -645,6 +634,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                         time: Date.now(),
                         isRead: false,
                       };
+
                       await createAlert(alertData);
                       break;
                     }
@@ -652,31 +642,32 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                 }
 
                 if (soldAmount == 100) {
-                  console.log('all token sold');
+                  console.log(`[${mint}] All Position Sold.`);
                   break;
                 }
 
+                await sleep(500);
+
               } catch (error) {
-                console.log('[tp/sl monitor] error:', error);
+                console.log(`[${mint}] Token Monitor Module Error: ${error}`);
+                break;
               }
-              await sleep(500);
             }
-            processing = false;
           } else {
-            processing = false;
+            console.log(`[${mint}] Buy Failed`);
             return;
           }
         } catch (error) {
           console.log('[monitor] error: ', error);
-          processing = false;
           return;
         }
       }
+
       monitor();
+      
     } catch (error) {
       if (error) {
       }
-      processing = false;
     }
   });
 
@@ -706,6 +697,33 @@ async function subscribeCommand(client: Client, args: SubscribeRequest) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
+}
+
+const getBondingCurveStatus = async (connection: Connection, bondingCurve: PublicKey) => {
+
+  const tokenAccount = await connection.getAccountInfo(
+    bondingCurve,
+    "processed"
+  );
+
+  const structure = struct([
+    u64("discriminator"),
+    u64("virtualTokenReserves"),
+    u64("virtualSolReserves"),
+    u64("realTokenReserves"),
+    u64("realSolReserves"),
+    u64("tokenTotalSupply"),
+    bool("complete"),
+  ]);
+
+  let value = structure.decode(tokenAccount!.data);
+
+  const virtualTokenReserves = BigInt(value.virtualTokenReserves);
+  const virtualSolReserves = BigInt(value.virtualSolReserves);
+  const realSolReserves = BigInt(value.realSolReserves);
+  const realTokenReserves = BigInt(value.realTokenReserves);
+
+  return { realSolReserves, realTokenReserves, virtualSolReserves, virtualTokenReserves };
 }
 
 export const sniperService = () => {
@@ -750,20 +768,31 @@ const jito_Validators = [
   "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
   "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
 ];
+
+const endpoints = [
+  "https://mainnet.block-engine.jito.wtf/api/v1/bundles",
+  "https://amsterdam.mainnet.block-engine.jito.wtf/api/v1/bundles",
+  "https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles",
+  "https://ny.mainnet.block-engine.jito.wtf/api/v1/bundles",
+  "https://tokyo.mainnet.block-engine.jito.wtf/api/v1/bundles",
+];
+
 async function getRandomValidator() {
   const res =
     jito_Validators[Math.floor(Math.random() * jito_Validators.length)];
   return new PublicKey(res);
 }
 
-export async function sendBundle(
+async function jito_executeAndConfirm(
   transaction: VersionedTransaction,
   payer: Keypair,
   lastestBlockhash: BlockhashWithExpiryBlockHeight,
   jitofee: number
 ) {
+  console.log("Executing transaction (jito)...");
+  const jito_validator_wallet = await getRandomValidator();
+  console.log("Selected Jito Validator: ", jito_validator_wallet.toBase58());
   try {
-    const jito_validator_wallet = await getRandomValidator();
     const jitoFee_message = new TransactionMessage({
       payerKey: payer.publicKey,
       recentBlockhash: lastestBlockhash.blockhash,
@@ -775,88 +804,161 @@ export async function sendBundle(
         }),
       ],
     }).compileToV0Message();
-
     const jitoFee_transaction = new VersionedTransaction(jitoFee_message);
     jitoFee_transaction.sign([payer]);
-
-    const serializedJitoFeeTransaction = base58.encode(jitoFee_transaction.serialize());
+    const jitoTxSignature = base58.encode(jitoFee_transaction.signatures[0]);
+    const serializedJitoFeeTransaction = base58.encode(
+      jitoFee_transaction.serialize()
+    );
     const serializedTransaction = base58.encode(transaction.serialize());
-
-    const { data } = await axios.post('https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles', {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "sendBundle",
-      params: [[
-        serializedJitoFeeTransaction,
-        serializedTransaction,
-      ]],
-    })
-    let bundleIds: any = [];
-    if (data) {
-      bundleIds = [
-        data.result
-      ];
+    const final_transaction = [
+      serializedJitoFeeTransaction,
+      serializedTransaction,
+    ];
+    const requests = endpoints.map((url) =>
+      axios.post(url, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "sendBundle",
+        params: [final_transaction],
+      })
+    );
+    console.log("Sending tx to Jito validators...");
+    const res = await Promise.all(requests.map((p) => p.catch((e: any) => e)));
+    const success_res = res.filter((r: any) => !(r instanceof Error));
+    if (success_res.length > 0) {
+      console.log("Jito validator accepted the tx");
+      return await jito_confirm(jitoTxSignature, lastestBlockhash);
+    } else {
+      console.log("No Jito validators accepted the tx");
+      return { confirmed: false, signature: jitoTxSignature };
     }
-
-    console.log("Checking bundle's status...", bundleIds);
-    const sentTime = Date.now();
-    let confirmed = false;
-    while (Date.now() - sentTime < 10000) {
-
-      try {
-        const { data } = await axios.post(`https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles`,
-          {
-            jsonrpc: "2.0",
-            id: 1,
-            method: "getBundleStatuses",
-            params: [
-              bundleIds
-            ],
-          },
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
-        if (data) {
-          const bundleStatuses = data.result.value;
-          console.log("Bundle Statuses:", bundleStatuses);
-          let success = true;
-
-          for (let i = 0; i < bundleIds.length; i++) {
-            const matched = bundleStatuses.find((item: any) => item && item.bundle_id === bundleIds[i]);
-            if (!matched || matched.confirmation_status !== "confirmed") { // finalized
-              success = false;
-              break;
-            }
-          }
-
-          if (success) {
-            confirmed = true;
-            break;
-          }
-        }
-      } catch (err) {
-        // console.log("JITO ERROR");
-        break;
-      }
-      await sleep(1000);
-    }
-    return confirmed;
   } catch (e) {
     if (e instanceof axios.AxiosError) {
       console.log("Failed to execute the jito transaction");
     } else {
-      console.log("Error during jito transaction execution");
+      console.log("Error during jito transaction execution: ", e);
     }
-    return false;
+    return { confirmed: false, signature: null };
   }
 }
 
+async function jito_confirm(signature: string, latestBlockhash: BlockhashWithExpiryBlockHeight) {
+  console.log("Confirming the jito transaction...");
+  const confirmation = await connection.confirmTransaction(
+    {
+      signature,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      blockhash: latestBlockhash.blockhash,
+    },
+    "confirmed"
+  );
+  return { confirmed: !confirmation.value.err, signature };
+}
+
+// export async function sendBundle(
+//   transaction: VersionedTransaction,
+//   payer: Keypair,
+//   lastestBlockhash: BlockhashWithExpiryBlockHeight,
+//   jitofee: number
+// ) {
+//   try {
+//     const jito_validator_wallet = await getRandomValidator();
+//     const jitoFee_message = new TransactionMessage({
+//       payerKey: payer.publicKey,
+//       recentBlockhash: lastestBlockhash.blockhash,
+//       instructions: [
+//         SystemProgram.transfer({
+//           fromPubkey: payer.publicKey,
+//           toPubkey: jito_validator_wallet,
+//           lamports: jitofee,
+//         }),
+//       ],
+//     }).compileToV0Message();
+
+//     const jitoFee_transaction = new VersionedTransaction(jitoFee_message);
+//     jitoFee_transaction.sign([payer]);
+
+//     const serializedJitoFeeTransaction = base58.encode(jitoFee_transaction.serialize());
+//     const serializedTransaction = base58.encode(transaction.serialize());
+
+//     const { data } = await axios.post('https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles', {
+//       jsonrpc: "2.0",
+//       id: 1,
+//       method: "sendBundle",
+//       params: [[
+//         serializedJitoFeeTransaction,
+//         serializedTransaction,
+//       ]],
+//     })
+//     let bundleIds: any = [];
+//     if (data) {
+//       bundleIds = [
+//         data.result
+//       ];
+//     }
+
+//     console.log("Checking bundle's status...", bundleIds);
+//     const sentTime = Date.now();
+//     let confirmed = false;
+//     while (Date.now() - sentTime < 10000) {
+
+//       try {
+//         const { data } = await axios.post(`https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles`,
+//           {
+//             jsonrpc: "2.0",
+//             id: 1,
+//             method: "getBundleStatuses",
+//             params: [
+//               bundleIds
+//             ],
+//           },
+//           {
+//             headers: {
+//               "Content-Type": "application/json",
+//             },
+//           }
+//         );
+
+//         if (data) {
+//           const bundleStatuses = data.result.value;
+//           console.log("Bundle Statuses:", bundleStatuses);
+//           let success = true;
+
+//           for (let i = 0; i < bundleIds.length; i++) {
+//             const matched = bundleStatuses.find((item: any) => item && item.bundle_id === bundleIds[i]);
+//             if (!matched || matched.confirmation_status !== "confirmed") { // finalized
+//               success = false;
+//               break;
+//             }
+//           }
+
+//           if (success) {
+//             confirmed = true;
+//             break;
+//           }
+//         }
+//       } catch (err) {
+//         // console.log("JITO ERROR");
+//         break;
+//       }
+//       await sleep(1000);
+//     }
+//     return confirmed;
+//   } catch (e) {
+//     if (e instanceof axios.AxiosError) {
+//       console.log("Failed to execute the jito transaction");
+//     } else {
+//       console.log("Error during jito transaction execution");
+//     }
+//     return false;
+//   }
+// }
+
 export const sell = async (mint: string, sell_amount: bigint, associatedBondingCurve: PublicKey, associatedUser: PublicKey, jito_tip: number) => {
+
   let transaction = new Transaction();
+
   transaction.add(
     await pumpfun_program.methods
       .sell(new BN(sell_amount.toString()), new BN(0))
@@ -880,16 +982,21 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
 
   const versionedTx = new VersionedTransaction(messageV0);
   versionedTx.sign([wallet]);
-  // const result = await connection.simulateTransaction(versionedTx);
-  const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
-  if (result) {
-    console.log('sell sucess');
-    const txSignature = base58.encode(versionedTx.signatures[0]);
-    return txSignature;
-  } else {
-    console.log('sell failed');
-    return null;
-  }
+
+  const simulation = await connection.simulateTransaction(versionedTx);
+  console.log(`[${mint}] Sell Simulation Result: `, simulation);
+
+  // const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
+  const result = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip);
+  // if (result.confirmed) {
+  //   console.log(`[${mint}] Sell Success. Signature: ${result.signature}`);
+  //   // const txSignature = base58.encode(versionedTx.signatures[0]);
+  //   return txSignature;
+  // } else {
+  //   console.log('sell failed');
+  //   return null;
+  // }
+  return result;
 }
 
 export const getSwapSolAmount = async (connection: Connection, signature: string) => {
