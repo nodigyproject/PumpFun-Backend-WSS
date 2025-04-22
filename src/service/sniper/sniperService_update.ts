@@ -362,6 +362,10 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           if (confirmed) {
             const txSignature = base58.encode(versionedTx.signatures[0]);
             const investSolAmount = await getSwapSolAmount(connection, txSignature);
+            if (investSolAmount == 0) {
+              console.log(`[${mint}] Buy Failed`);
+              return;
+            }
             console.log(`[${mint}] Buy Amount: ${investSolAmount / LAMPORTS_PER_SOL} SOL`);
             const buyPrice = (investSolAmount / LAMPORTS_PER_SOL) / (Number(buyTokenAmount) / 1000000);
 
@@ -459,58 +463,61 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
                   // save trx to db
                   if (signature) {
-
-                    console.log(`[${mint}] MC Not Change Selling Success.`)
                     const solAmount = await getSwapSolAmount(connection, signature);
-                    const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
-                    const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
-                    const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
-                    // console.log('swapProfit = ', swapProfit);
-                    // console.log('swapProfitPercent = ', swapProfitPercent);
+                    if (solAmount == 0) {
+                      console.log(`[${mint}] MC Not Change Selling Failed.`);
+                    } else {
+                      console.log(`[${mint}] MC Not Change Selling Success.`)
+                      const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
+                      const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
+                      const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
+                      // console.log('swapProfit = ', swapProfit);
+                      // console.log('swapProfitPercent = ', swapProfitPercent);
 
-                    const result = await SniperTxns.findOneAndUpdate(
-                      { txHash: signature }, // Query
-                      { // Update document
-                        $setOnInsert: {
-                          txHash: signature,
-                          mint,
-                          txTime: Date.now(),
-                          tokenName,
-                          tokenSymbol,
-                          tokenImage,
-                          swap: "SELL",
-                          swapPrice_usd: sellPrice,
-                          swapAmount: Number(remain_amount) / 1000000,
-                          swapFee_usd: jito_tip,
-                          swapMC_usd: marketCapSol_now,
-                          swapProfit_usd: swapProfit,
-                          swapProfitPercent_usd: swapProfitPercent,
-                          buyMC_usd: marketCapSol,
-                          dex: "Pumpfun",
-                          date: Date.now()
+                      const result = await SniperTxns.findOneAndUpdate(
+                        { txHash: signature }, // Query
+                        { // Update document
+                          $setOnInsert: {
+                            txHash: signature,
+                            mint,
+                            txTime: Date.now(),
+                            tokenName,
+                            tokenSymbol,
+                            tokenImage,
+                            swap: "SELL",
+                            swapPrice_usd: sellPrice,
+                            swapAmount: Number(remain_amount) / 1000000,
+                            swapFee_usd: jito_tip,
+                            swapMC_usd: marketCapSol_now,
+                            swapProfit_usd: swapProfit,
+                            swapProfitPercent_usd: swapProfitPercent,
+                            buyMC_usd: marketCapSol,
+                            dex: "Pumpfun",
+                            date: Date.now()
+                          }
+                        },
+                        {
+                          upsert: true,
+                          new: true,
+                          runValidators: true
                         }
-                      },
-                      {
-                        upsert: true,
-                        new: true,
-                        runValidators: true
-                      }
-                    );
+                      );
 
-                    console.log(`[${mint}] Save Sell Transaction: ${result}`);
+                      console.log(`[${mint}] Save Sell Transaction: ${result}`);
 
-                    const alertData: IAlertMsg = {
-                      imageUrl: tokenImage,
-                      title: tokenName,
-                      content: "You just sold out this token.",
-                      link: mint,
-                      time: Date.now(),
-                      isRead: false,
-                    };
+                      const alertData: IAlertMsg = {
+                        imageUrl: tokenImage,
+                        title: tokenName,
+                        content: "You just sold out this token.",
+                        link: mint,
+                        time: Date.now(),
+                        isRead: false,
+                      };
 
-                    await createAlert(alertData);
+                      await createAlert(alertData);
 
-                    break;
+                      break;
+                    }
                   } else {
                     console.log(`[${mint}] MC Not Change Selling Failed.`);
                   }
@@ -525,54 +532,59 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
                   if (signature) {
 
-                    console.log(`[${mint}] Stop Loss Selling Success.`);
                     const solAmount = await getSwapSolAmount(connection, signature);
-                    const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
-                    const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
-                    const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
-                    // console.log('swapProfit = ', swapProfit);
-                    // console.log('swapProfitPercent = ', swapProfitPercent);
-                    const result = await SniperTxns.findOneAndUpdate(
-                      { txHash: signature }, // Query
-                      { // Update document
-                        $setOnInsert: {
-                          txHash: signature,
-                          mint,
-                          txTime: Date.now(),
-                          tokenName,
-                          tokenSymbol,
-                          tokenImage,
-                          swap: "SELL",
-                          swapPrice_usd: sellPrice,
-                          swapAmount: Number(remain_amount) / 1000000,
-                          swapFee_usd: jito_tip,
-                          swapMC_usd: marketCapSol_now,
-                          swapProfit_usd: swapProfit,
-                          swapProfitPercent_usd: swapProfitPercent,
-                          buyMC_usd: marketCapSol,
-                          dex: "Pumpfun",
-                          date: Date.now()
+
+                    if (solAmount == 0) {
+                      console.log(`[${mint}] Stop Loss Selling Failed.`);
+                    } else {
+                      console.log(`[${mint}] Stop Loss Selling Success.`);
+                      const sellPrice = (Number(solAmount) / LAMPORTS_PER_SOL) / (Number(remain_amount) / 1000000)
+                      const swapProfit = (sellPrice - buyPrice) * (Number(remain_amount) / 1000000);
+                      const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
+                      // console.log('swapProfit = ', swapProfit);
+                      // console.log('swapProfitPercent = ', swapProfitPercent);
+                      const result = await SniperTxns.findOneAndUpdate(
+                        { txHash: signature }, // Query
+                        { // Update document
+                          $setOnInsert: {
+                            txHash: signature,
+                            mint,
+                            txTime: Date.now(),
+                            tokenName,
+                            tokenSymbol,
+                            tokenImage,
+                            swap: "SELL",
+                            swapPrice_usd: sellPrice,
+                            swapAmount: Number(remain_amount) / 1000000,
+                            swapFee_usd: jito_tip,
+                            swapMC_usd: marketCapSol_now,
+                            swapProfit_usd: swapProfit,
+                            swapProfitPercent_usd: swapProfitPercent,
+                            buyMC_usd: marketCapSol,
+                            dex: "Pumpfun",
+                            date: Date.now()
+                          }
+                        },
+                        {
+                          upsert: true,
+                          new: true,
+                          runValidators: true
                         }
-                      },
-                      {
-                        upsert: true,
-                        new: true,
-                        runValidators: true
-                      }
-                    );
-                    console.log(`[${mint}] Save Stop Loss Selling Transaction: ${result}`);
+                      );
+                      console.log(`[${mint}] Save Stop Loss Selling Transaction: ${result}`);
 
-                    const alertData: IAlertMsg = {
-                      imageUrl: tokenImage,
-                      title: tokenName,
-                      content: "You just sold out this token.",
-                      link: mint,
-                      time: Date.now(),
-                      isRead: false,
-                    };
+                      const alertData: IAlertMsg = {
+                        imageUrl: tokenImage,
+                        title: tokenName,
+                        content: "You just sold out this token.",
+                        link: mint,
+                        time: Date.now(),
+                        isRead: false,
+                      };
 
-                    await createAlert(alertData);
-                    break;
+                      await createAlert(alertData);
+                      break;
+                    }
                   } else {
                     console.log(`[${mint}] Stop Loss Selling Failed.`);
                   }
@@ -592,61 +604,68 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
                     const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
 
-                    if (confirmed && signature) {
-
-                      console.log(`[${mint}] Revenue Selling Success.`);
+                    if (signature) {
 
                       const solAmount = await getSwapSolAmount(connection, signature);
-                      soldAmount = sell_amounts[i];
-                      remain_amount = remain_amount - amount;
-                      const sellPrice = (solAmount / LAMPORTS_PER_SOL) / (Number(amount) / 1000000);
-                      const swapProfit = (sellPrice - buyPrice) * (Number(amount) / 1000000);
-                      const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
-                      // console.log('swapProfit = ', swapProfit);
-                      // console.log('swapProfitPercent = ', swapProfitPercent);
 
-                      const result = await SniperTxns.findOneAndUpdate(
-                        { txHash: signature }, // Query
-                        { // Update document
-                          $setOnInsert: {
-                            txHash: signature,
-                            mint,
-                            txTime: Date.now(),
-                            tokenName,
-                            tokenSymbol,
-                            tokenImage,
-                            swap: "SELL",
-                            swapPrice_usd: sellPrice,
-                            swapAmount: Number(amount) / 1000000,
-                            swapFee_usd: jito_tip,
-                            swapMC_usd: marketCapSol_now,
-                            swapProfit_usd: swapProfit,
-                            swapProfitPercent_usd: swapProfitPercent,
-                            buyMC_usd: marketCapSol,
-                            dex: "Pumpfun",
-                            date: Date.now()
+                      if (solAmount == 0) {
+                        console.log(`[${mint}] Revenue Selling Failed.`);
+                      } else {
+                        console.log(`[${mint}] Revenue Selling Success.`);
+
+                        soldAmount = sell_amounts[i];
+                        remain_amount = remain_amount - amount;
+                        const sellPrice = (solAmount / LAMPORTS_PER_SOL) / (Number(amount) / 1000000);
+                        const swapProfit = (sellPrice - buyPrice) * (Number(amount) / 1000000);
+                        const swapProfitPercent = swapProfit / (investSolAmount / LAMPORTS_PER_SOL) * 100;
+                        // console.log('swapProfit = ', swapProfit);
+                        // console.log('swapProfitPercent = ', swapProfitPercent);
+
+                        const result = await SniperTxns.findOneAndUpdate(
+                          { txHash: signature }, // Query
+                          { // Update document
+                            $setOnInsert: {
+                              txHash: signature,
+                              mint,
+                              txTime: Date.now(),
+                              tokenName,
+                              tokenSymbol,
+                              tokenImage,
+                              swap: "SELL",
+                              swapPrice_usd: sellPrice,
+                              swapAmount: Number(amount) / 1000000,
+                              swapFee_usd: jito_tip,
+                              swapMC_usd: marketCapSol_now,
+                              swapProfit_usd: swapProfit,
+                              swapProfitPercent_usd: swapProfitPercent,
+                              buyMC_usd: marketCapSol,
+                              dex: "Pumpfun",
+                              date: Date.now()
+                            }
+                          },
+                          {
+                            upsert: true,
+                            new: true,
+                            runValidators: true
                           }
-                        },
-                        {
-                          upsert: true,
-                          new: true,
-                          runValidators: true
-                        }
-                      );
+                        );
 
-                      console.log(`[${mint}] Save Revenue Selling Transaction: ${result}`);
+                        console.log(`[${mint}] Save Revenue Selling Transaction: ${result}`);
 
-                      const alertData: IAlertMsg = {
-                        imageUrl: tokenImage,
-                        title: tokenName,
-                        content: "You just sold out this token.",
-                        link: mint,
-                        time: Date.now(),
-                        isRead: false,
-                      };
+                        const alertData: IAlertMsg = {
+                          imageUrl: tokenImage,
+                          title: tokenName,
+                          content: "You just sold out this token.",
+                          link: mint,
+                          time: Date.now(),
+                          isRead: false,
+                        };
 
-                      await createAlert(alertData);
-                      break;
+                        await createAlert(alertData);
+                        break;
+                      }
+                    } else {
+                      console.log(`[${mint}] Revenue Selling Failed.`);
                     }
                   }
                 }
