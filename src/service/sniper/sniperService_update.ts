@@ -890,105 +890,6 @@ async function jito_confirm(signature: string, latestBlockhash: BlockhashWithExp
   return { confirmed: !confirmation.value.err, signature };
 }
 
-// export async function sendBundle(
-//   transaction: VersionedTransaction,
-//   payer: Keypair,
-//   lastestBlockhash: BlockhashWithExpiryBlockHeight,
-//   jitofee: number
-// ) {
-//   try {
-//     const jito_validator_wallet = await getRandomValidator();
-//     const jitoFee_message = new TransactionMessage({
-//       payerKey: payer.publicKey,
-//       recentBlockhash: lastestBlockhash.blockhash,
-//       instructions: [
-//         SystemProgram.transfer({
-//           fromPubkey: payer.publicKey,
-//           toPubkey: jito_validator_wallet,
-//           lamports: jitofee,
-//         }),
-//       ],
-//     }).compileToV0Message();
-
-//     const jitoFee_transaction = new VersionedTransaction(jitoFee_message);
-//     jitoFee_transaction.sign([payer]);
-
-//     const serializedJitoFeeTransaction = base58.encode(jitoFee_transaction.serialize());
-//     const serializedTransaction = base58.encode(transaction.serialize());
-
-//     const { data } = await axios.post('https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles', {
-//       jsonrpc: "2.0",
-//       id: 1,
-//       method: "sendBundle",
-//       params: [[
-//         serializedJitoFeeTransaction,
-//         serializedTransaction,
-//       ]],
-//     })
-//     let bundleIds: any = [];
-//     if (data) {
-//       bundleIds = [
-//         data.result
-//       ];
-//     }
-
-//     console.log("Checking bundle's status...", bundleIds);
-//     const sentTime = Date.now();
-//     let confirmed = false;
-//     while (Date.now() - sentTime < 10000) {
-
-//       try {
-//         const { data } = await axios.post(`https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles`,
-//           {
-//             jsonrpc: "2.0",
-//             id: 1,
-//             method: "getBundleStatuses",
-//             params: [
-//               bundleIds
-//             ],
-//           },
-//           {
-//             headers: {
-//               "Content-Type": "application/json",
-//             },
-//           }
-//         );
-
-//         if (data) {
-//           const bundleStatuses = data.result.value;
-//           console.log("Bundle Statuses:", bundleStatuses);
-//           let success = true;
-
-//           for (let i = 0; i < bundleIds.length; i++) {
-//             const matched = bundleStatuses.find((item: any) => item && item.bundle_id === bundleIds[i]);
-//             if (!matched || matched.confirmation_status !== "confirmed") { // finalized
-//               success = false;
-//               break;
-//             }
-//           }
-
-//           if (success) {
-//             confirmed = true;
-//             break;
-//           }
-//         }
-//       } catch (err) {
-//         // console.log("JITO ERROR");
-//         break;
-//       }
-//       await sleep(1000);
-//     }
-//     return confirmed;
-//   } catch (e) {
-//     if (e instanceof axios.AxiosError) {
-//       console.log("Failed to execute the jito transaction");
-//     } else {
-//       console.log("Error during jito transaction execution");
-//     }
-//     return false;
-//   }
-// }
-
 export const sell = async (mint: string, sell_amount: bigint, associatedBondingCurve: PublicKey, associatedUser: PublicKey, jito_tip: number) => {
 
   let transaction = new Transaction();
@@ -1020,16 +921,8 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
   const simulation = await connection.simulateTransaction(versionedTx);
   console.log(`[${mint}] Sell Simulation Result: `, simulation);
 
-  // const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
   const result = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip);
-  // if (result.confirmed) {
-  //   console.log(`[${mint}] Sell Success. Signature: ${result.signature}`);
-  //   // const txSignature = base58.encode(versionedTx.signatures[0]);
-  //   return txSignature;
-  // } else {
-  //   console.log('sell failed');
-  //   return null;
-  // }
+
   if (result.confirmed) {
     const signature = base58.encode(versionedTx.signatures[0]);
     return signature;

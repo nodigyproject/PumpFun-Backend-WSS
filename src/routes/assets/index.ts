@@ -26,6 +26,7 @@ const router = Router();
 
 router.get("/", async (req, res) => {
   try {
+    console.log('assets router, get');
     // assets/?limit=10&offset=0&sort_field=total_invested&sort_order=desc
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = parseInt(req.query.offset as string) || 0;
@@ -42,54 +43,54 @@ router.get("/", async (req, res) => {
 
     const filteredData = search
       ? zeroData.filter(
-          (item) =>
-            item.tokenName?.toLowerCase().includes(search.toLowerCase()) ||
-            item.tokenSymbol?.toLowerCase().includes(search.toLowerCase()) ||
-            item.mint.toLowerCase().includes(search.toLowerCase())
-        )
+        (item) =>
+          item.tokenName?.toLowerCase().includes(search.toLowerCase()) ||
+          item.tokenSymbol?.toLowerCase().includes(search.toLowerCase()) ||
+          item.mint.toLowerCase().includes(search.toLowerCase())
+      )
       : zeroData;
 
     const sortedData =
       sortField !== ""
         ? [...filteredData].sort((a, b) => {
-            let aValue, bValue;
-            if (sortField === "age") {
-              aValue = a.tokenCreateTime;
-              bValue = b.tokenCreateTime;
-            } else if (sortField === "marketCap") {
-              aValue = a.currentMC_usd;
-              bValue = b.currentMC_usd;
-            } else if (sortField === "price") {
-              aValue = a.currentPrice_usd;
-              bValue = b.currentPrice_usd;
-            } else if (sortField === "total_invested") {
-              aValue = a.investedAmount;
-              bValue = b.investedAmount;
-            } else if (sortField === "pnl") {
-              aValue = a.pnl.percent;
-              bValue = b.pnl.percent;
-            } else if (sortField === "holding") {
-              aValue = a.currentAmount || 0;
-              bValue = b.currentAmount || 0;
-            } else if (sortField === "selling_step") {
-              aValue = a.sellingStep || 0;
-              bValue = b.sellingStep || 0;
-            } else if (sortField === "real_profit") {
-              aValue = a.realisedProfit || 0;
-              bValue = b.realisedProfit || 0;
-            }
-            if (sortOrder === "desc") {
-              return (bValue || 0) - (aValue || 0);
-            }
-            return (aValue || 0) - (bValue || 0);
-          })
+          let aValue, bValue;
+          if (sortField === "age") {
+            aValue = a.tokenCreateTime;
+            bValue = b.tokenCreateTime;
+          } else if (sortField === "marketCap") {
+            aValue = a.currentMC_usd;
+            bValue = b.currentMC_usd;
+          } else if (sortField === "price") {
+            aValue = a.currentPrice_usd;
+            bValue = b.currentPrice_usd;
+          } else if (sortField === "total_invested") {
+            aValue = a.investedAmount;
+            bValue = b.investedAmount;
+          } else if (sortField === "pnl") {
+            aValue = a.pnl.percent;
+            bValue = b.pnl.percent;
+          } else if (sortField === "holding") {
+            aValue = a.currentAmount || 0;
+            bValue = b.currentAmount || 0;
+          } else if (sortField === "selling_step") {
+            aValue = a.sellingStep || 0;
+            bValue = b.sellingStep || 0;
+          } else if (sortField === "real_profit") {
+            aValue = a.realisedProfit || 0;
+            bValue = b.realisedProfit || 0;
+          }
+          if (sortOrder === "desc") {
+            return (bValue || 0) - (aValue || 0);
+          }
+          return (aValue || 0) - (bValue || 0);
+        })
         : [...filteredData].sort((a, b) => {
-            // Sort by created_timestamp in default
-            let aValue, bValue;
-            aValue = a.tokenCreateTime || 0;
-            bValue = b.tokenCreateTime || 0;
-            return bValue - aValue;
-          });
+          // Sort by created_timestamp in default
+          let aValue, bValue;
+          aValue = a.tokenCreateTime || 0;
+          bValue = b.tokenCreateTime || 0;
+          return bValue - aValue;
+        });
     // Apply pagination
     const paginatedData = sortedData.slice(offset, offset + limit);
 
@@ -136,7 +137,7 @@ router.post("/selltoken", async (req, res) => {
       return res.status(400).json({ message: "no token to sell" });
 
     const txHash = await sellTokenSwap(mint, currentAmount, true, false);
-    if(txHash) {
+    if (txHash) {
       res.status(200).json({
         status: "successfully sold.",
       });
@@ -165,7 +166,7 @@ router.post("/sellall", async (req, res) => {
     logger.info(`[POST] /sellall from ${request_user}. ` + tokens.length);
 
     const BATCH_SIZE = 5;
-    let rlt:(string|null)[] = [];
+    let rlt: (string | null)[] = [];
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
       const tokenBatch = tokens.slice(i, i + BATCH_SIZE);
       const tmp = await Promise.all(
@@ -179,7 +180,7 @@ router.post("/sellall", async (req, res) => {
 
 
     if (rlt.includes(null)) {
-      logger.info("[sellall]"  + " sell all failed");
+      logger.info("[sellall]" + " sell all failed");
       return res.status(400).json({ message: "sell all failed." });
     }
     await SniperTxns.collection.drop();
@@ -201,7 +202,7 @@ router.get("/:mint", async (req, res) => {
   try {
     const { mint } = req.params;
     const tokenData = await getTokenDataforAssets(mint);
-    if(!tokenData) {
+    if (!tokenData) {
       return res.status(400).json({ message: "no token data" });
     }
     const txData: ITransaction[] = await SniperTxns.find({ mint: mint }).sort({
