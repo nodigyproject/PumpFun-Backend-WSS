@@ -15,7 +15,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { getCachedSolPrice, getLastValidBlockhash } from "../../sniper/getBlock";
+import { getLatestBlockhash } from "../../sniper/getBlock";
 import { JitoAccounts } from "../jito/jito";
 import {
   jsonInfo2PoolKeys,
@@ -79,19 +79,17 @@ export const raydiumSwap = async (
   if ((currentPrice.baseCurrency as Token).mint.equals(NATIVE_MINT)) {
     price = currentPrice.denominator.mul(new BN(LAMPORTS_PER_SOL)).div(currentPrice.numerator).toNumber() / 10 ** decimalsDiff / LAMPORTS_PER_SOL;
   } else {
-    price = currentPrice.numerator.mul(new BN(LAMPORTS_PER_SOL)).div(currentPrice.denominator).toNumber() * 10 ** decimalsDiff / LAMPORTS_PER_SOL;      
+    price = currentPrice.numerator.mul(new BN(LAMPORTS_PER_SOL)).div(currentPrice.denominator).toNumber() * 10 ** decimalsDiff / LAMPORTS_PER_SOL;
   }
-  price *=  getCachedSolPrice();
-
 
   const _tmpMinAmt = minAmountOut.numerator.mul(new BN(LAMPORTS_PER_SOL)).div(minAmountOut.denominator).toNumber() / LAMPORTS_PER_SOL;
   let wSolReserveAmount = poolKeys.baseMint.equals(NATIVE_MINT) ? poolInfo.baseReserve : poolInfo.quoteReserve;
   wSolReserveAmount = wSolReserveAmount.div(new BN(LAMPORTS_PER_SOL));
-  if((wSolReserveAmount.toNumber() <= 0 || _tmpMinAmt < 0.000001) && is_buy === false) {
+  if ((wSolReserveAmount.toNumber() <= 0 || _tmpMinAmt < 0.000001) && is_buy === false) {
     const isSellAll = swapParam.isSellAll || false;
     const vTxn = await tokenClose(mint, inAmount, isSellAll);
     const outAmount = amountOut.numerator.mul(new BN(LAMPORTS_PER_SOL)).div(amountOut.denominator).toNumber() / LAMPORTS_PER_SOL;
-    if(!vTxn) return null;
+    if (!vTxn) return null;
     return {
       vTxn: vTxn,
       inAmount: inAmount / 10 ** inDecimal,
@@ -144,14 +142,14 @@ export const raydiumSwap = async (
     );
   }
 
-  const blockhash = getLastValidBlockhash();
-  if (!blockhash) {
+  const latestBlockhash = getLatestBlockhash();
+  if (!latestBlockhash) {
     console.error("Failed to retrieve blockhash from cache");
     throw new Error("Failed to retrieve blockhash from cache");
   }
   const messageV0 = new TransactionMessage({
     payerKey: wallet.publicKey,
-    recentBlockhash: blockhash,
+    recentBlockhash: latestBlockhash.blockhash,
     instructions,
   }).compileToV0Message();
 

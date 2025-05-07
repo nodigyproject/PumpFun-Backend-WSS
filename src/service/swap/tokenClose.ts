@@ -14,7 +14,7 @@ import {
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { TOKEN_DECIMALS } from "../../utils/constants";
-import { getLastValidBlockhash } from "../sniper/getBlock";
+import { getLatestBlockhash } from "../sniper/getBlock";
 
 export const tokenClose = async (
   mint: string,
@@ -48,7 +48,7 @@ export const tokenClose = async (
       )
     );
   }
-  if(isSellAll) {
+  if (isSellAll) {
 
     instructions.push(
       createCloseAccountInstruction(
@@ -58,11 +58,11 @@ export const tokenClose = async (
       )
     )
   }
-  const blockhash = getLastValidBlockhash();
+  const latestBlockhash = getLatestBlockhash();
 
   const messageV0 = new TransactionMessage({
     payerKey: wallet.publicKey,
-    recentBlockhash: blockhash,
+    recentBlockhash: latestBlockhash.blockhash,
     instructions,
   }).compileToV0Message();
   const vTxn = new VersionedTransaction(messageV0);

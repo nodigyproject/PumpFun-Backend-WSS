@@ -7,11 +7,10 @@ import { raydiumSwap } from "./raydium/raydiumSwap";
 import { pumpfunSwap } from "./pumpfun/pumpfunSwap";
 import logger from "../../logs/logger";
 import { tokenClose } from "./tokenClose";
-import { getCachedSolPrice } from "../sniper/getBlock";
 import * as spl from "@solana/spl-token";
 import { PublicKey, TransactionMessage } from "@solana/web3.js";
 import { getTokenBalance } from "../pumpfun/pumpfun";
-import { getLastValidBlockhash } from "../sniper/getBlock";
+import { getLatestBlockhash } from "../sniper/getBlock";
 
 // Small amount threshold for automatic burning instead of selling (in token units)
 const DUST_AMOUNT_THRESHOLD = 0.0001;
@@ -47,7 +46,7 @@ export async function confirmVtxn(txn: VersionedTransaction, mint: string) {
   const shortMint = getTokenShortName(mint);
   const startTime = Date.now();
   const CONFIRM_TIMEOUT_MS = 30000; // 30 seconds max wait
-  
+
   try {
     const rawTxn = txn.serialize();
     const jitoBundleInstance = new JitoBundleService();
@@ -59,10 +58,10 @@ export async function confirmVtxn(txn: VersionedTransaction, mint: string) {
 
     // Set up confirmation with timeout
     const confirmationPromise = connection.confirmTransaction(txHash);
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("Transaction confirmation timeout")), CONFIRM_TIMEOUT_MS)
     );
-    
+
     // Race between confirmation and timeout
     const txRlt = await Promise.race([confirmationPromise, timeoutPromise]);
     // Add type guard to check that txRlt has the expected structure
@@ -89,50 +88,50 @@ export async function confirmVtxn(txn: VersionedTransaction, mint: string) {
  */
 async function handleAccountClosure(mint: string) {
   const shortMint = getTokenShortName(mint);
-  
+
   // Wait a bit to ensure the swap transaction has been fully processed
   await new Promise(resolve => setTimeout(resolve, ACCOUNT_CLOSE_DELAY));
-  
+
   try {
     // Verify the account is actually empty
     const remainingBalance = await getTokenBalance(wallet.publicKey.toBase58(), mint);
-    
+
     if (remainingBalance > 0) {
       logger.warn(`[⚠️ SAFETY-ABORT] ${shortMint} | Account not empty (${remainingBalance} tokens remain). Aborting account closure.`);
       return null;
     }
-    
+
     logger.info(`[✓ EMPTY-ACCOUNT] ${shortMint} | Account is empty. Proceeding with closure.`);
-    
+
     // Create a separate transaction just for account closure
     const splAta = spl.getAssociatedTokenAddressSync(
       new PublicKey(mint),
       wallet.publicKey,
       true
     );
-    
+
     const closeAccountInst = spl.createCloseAccountInstruction(
       splAta,
       wallet.publicKey,
       wallet.publicKey
     );
-    
+
     // Create and send the transaction
-    const blockhash = getLastValidBlockhash();
-    if (!blockhash) {
+    const latestBlockhash = getLatestBlockhash();
+    if (!latestBlockhash) {
       logger.error(`[❌ CLOSE-ERROR] ${shortMint} | Failed to get blockhash for account closure`);
       return null;
     }
-    
+
     const closeMsg = new TransactionMessage({
       payerKey: wallet.publicKey,
-      recentBlockhash: blockhash,
+      recentBlockhash: latestBlockhash.blockhash,
       instructions: [closeAccountInst],
     }).compileToV0Message();
-    
+
     const closeTx = new VersionedTransaction(closeMsg);
     closeTx.sign([wallet]);
-    
+
     // Simulate before sending
     try {
       await simulateTxn(closeTx);
@@ -141,7 +140,7 @@ async function handleAccountClosure(mint: string) {
       logger.error(`[❌ CLOSE-SIM-ERROR] ${shortMint} | Account closure simulation failed: ${simError}`);
       return null;
     }
-    
+
     const closeResult = await confirmVtxn(closeTx, mint);
     if (closeResult) {
       logger.info(`[✅ ACCOUNT-CLOSED] ${shortMint} | Token account successfully closed in separate transaction`);
@@ -186,7 +185,7 @@ export const swap = async (
       logger.info(`[🔥 BURN-DECISION] ${shortMint} | Amount ${formatTokenAmount(amount)} is below threshold ${DUST_AMOUNT_THRESHOLD}. Using token burn.`);
       vTxn = await tokenClose(mint, amount, isSellAll);
       swapMethod = "tokenClose";
-      
+
       // Set this to false since we're already burning tokens
       needsAccountClose = false;
 
@@ -283,23 +282,23 @@ export const swap = async (
         logger.info(`[🧪 SIMULATING] ${shortMint} | Simulating transaction before submission`);
         await simulateTxn(vTxn);
         logger.info(`[✅ SIMULATION-SUCCESS] ${shortMint} | Transaction simulation successful`);
-        
+
         // Confirm the transaction
         const result = await confirmVtxn(vTxn, mint);
         if (!result) {
           logger.error(`[❌ CONFIRMATION-FAILED] ${shortMint} | Transaction confirmation failed`);
           return null;
         }
-        
+
         const { txHash } = result;
         logger.info(`[✅ SWAP-COMPLETE] ${shortMint} | ${operation} | Method: ${swapMethod} | TxHash: ${txHash.slice(0, 8)}...`);
-        
+
         // Handle account closure as a separate transaction if needed
         let closeAccountTxHash = null;
         if (!is_buy && isSellAll && needsAccountClose) {
           logger.info(`[🔒 FOLLOW-UP] ${shortMint} | Proceeding with account closure in separate transaction`);
           closeAccountTxHash = await handleAccountClosure(mint);
-          
+
           if (closeAccountTxHash) {
             logger.info(`[✅ CLOSE-COMPLETE] ${shortMint} | Account closed successfully in separate transaction: ${closeAccountTxHash.slice(0, 8)}...`);
           }
@@ -318,10 +317,10 @@ export const swap = async (
           };
         }
 
-        return { 
-          txHash, 
-          price, 
-          inAmount, 
+        return {
+          txHash,
+          price,
+          inAmount,
           outAmount,
           closeAccountTxHash // Include close account txn hash if available
         };

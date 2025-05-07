@@ -17,7 +17,7 @@ export interface ITransaction extends Document {
   swapProfitPercent_usd?: number;
   buyMC_usd?: number;
   date: number;
-  dex:"Raydium" | "Pumpfun";
+  dex: "Raydium" | "Pumpfun";
 }
 
 const TransactionSchema = new Schema({
@@ -37,7 +37,7 @@ const TransactionSchema = new Schema({
   swapProfitPercent_usd: { type: Number },
   buyMC_usd: { type: Number },
   date: { type: Number, default: Date.now },
-  dex: { type: String, enum: ["Raydium", "Pumpfun"] },
+  dex: { type: String, enum: ["Pumpswap", "Pumpfun"] },
 });
 
 export const SniperTxns = mongoose.model<ITransaction>(

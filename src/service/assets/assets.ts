@@ -14,7 +14,7 @@ export async function getWalletTokens(walletAddress: PublicKey) {
       walletAddress,
       { programId: TOKEN_PROGRAM_ID }
     );
-  
+
     const tokens = tokenAccounts.value.map((ta) => {
       const accountData = AccountLayout.decode(ta.account.data);
       return {
@@ -38,9 +38,7 @@ export async function getWalletTokens(walletAddress: PublicKey) {
 
 export const getSolBananceFromWallet = async (wallet: Keypair) => {
   try {
-    const walletAddress = wallet.publicKey.toBase58();
-    const pubKey = new PublicKey(walletAddress);
-    const solBalance = await connection.getBalance(pubKey);
+    const solBalance = await connection.getBalance(wallet.publicKey);
     return solBalance / LAMPORTS_PER_SOL;
   } catch (error) {
     logger.error("getSolBananceFromWallet error" + error);
@@ -98,7 +96,7 @@ export const getTokenDataforAssets = async (
       mint: mint,
       swap: "SELL",
     }).sort({ txTime: -1 });
-    if(!lastSellTxn) currentPrice_usd = tmp?.price;
+    if (!lastSellTxn) currentPrice_usd = tmp?.price;
     else currentPrice_usd = Number(lastSellTxn?.swapPrice_usd || 0);
   } else {
     // @ts-ignore
@@ -137,9 +135,9 @@ export const getTokenDataforAssets = async (
   const real_profit = Number(cacheData.realisedProfit);
   const unreal_profit = Number(
     (currentPrice_usd - (cacheData.investedPrice_usd || currentPrice_usd)) *
-      (cacheData.currentAmount || 0)
+    (cacheData.currentAmount || 0)
   );
-  const holdingValue_usd =  Number(cacheData.currentAmount || 0) * Number(currentPrice_usd || 0);
+  const holdingValue_usd = Number(cacheData.currentAmount || 0) * Number(currentPrice_usd || 0);
   // console.log(holdingValue_usd, cacheData.currentAmount, currentPrice_usd);
   const sellTxns = await SniperTxns.find({ mint: mint, swap: "SELL" });
   let sellAmount_usd = 0;
@@ -169,7 +167,7 @@ export const getTokenDataforAssets = async (
       percent: Number(
         (currentPrice_usd / (cacheData.investedPrice_usd || currentPrice_usd) -
           1) *
-          100
+        100
       ),
     },
     holding: {

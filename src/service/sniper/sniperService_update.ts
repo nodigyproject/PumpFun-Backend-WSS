@@ -31,6 +31,7 @@ import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import { struct, bool, u64, Layout } from "@coral-xyz/borsh";
 import * as spl from "@solana/spl-token";
 import { SniperTxns } from "../../models/SniperTxns";
+import { getLatestBlockhash } from "./getBlock";
 
 dotenv.config();
 
@@ -38,7 +39,8 @@ const pumpfun = 'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM';
 const provider = new AnchorProvider(connection, new NodeWallet(new Keypair()), {
   commitment: "processed",
 });
-const pumpfun_program = new Program<PumpFun>(IDL as PumpFun, provider);
+
+export const pumpfun_program = new Program<PumpFun>(IDL as PumpFun, provider);
 
 let lastProcessTime = 0;
 const MIN_TOKEN_PROCESS_INTERVAL = 1000;
@@ -344,7 +346,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               .transaction()
           );
 
-          const blockHash = await connection.getLatestBlockhash();
+          // const blockHash = await connection.getLatestBlockhash();
+          const blockHash = getLatestBlockhash();
 
           let messageV0 = new TransactionMessage({
             payerKey: wallet.publicKey,
@@ -817,7 +820,7 @@ async function getRandomValidator() {
   return new PublicKey(res);
 }
 
-async function jito_executeAndConfirm(
+export async function jito_executeAndConfirm(
   transaction: VersionedTransaction,
   payer: Keypair,
   lastestBlockhash: BlockhashWithExpiryBlockHeight,
@@ -907,11 +910,12 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
       .transaction()
   );
 
-  const blockHash = await connection.getLatestBlockhash();
+  // const blockHash = await connection.getLatestBlockhash();
+  const latestBlockhash = getLatestBlockhash();
 
   let messageV0 = new TransactionMessage({
     payerKey: wallet.publicKey,
-    recentBlockhash: blockHash.blockhash,
+    recentBlockhash: latestBlockhash.blockhash,
     instructions: transaction.instructions,
   }).compileToV0Message();
 
@@ -919,9 +923,13 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
   versionedTx.sign([wallet]);
 
   const simulation = await connection.simulateTransaction(versionedTx);
-  console.log(`[${mint}] Sell Simulation Result: `, simulation);
 
-  const result = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip);
+  if (simulation.value.err) {
+    console.log(`[${mint}] Sell Simulation failed: `, simulation);
+    return null;
+  }
+
+  const result = await jito_executeAndConfirm(versionedTx, wallet, latestBlockhash, jito_tip);
 
   if (result.confirmed) {
     const signature = base58.encode(versionedTx.signatures[0]);

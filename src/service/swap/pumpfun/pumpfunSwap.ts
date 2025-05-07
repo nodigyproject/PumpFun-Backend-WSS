@@ -27,7 +27,7 @@ import {
   RENT,
   TOKEN_DECIMALS,
 } from "../../../utils/constants";
-import { getLastValidBlockhash } from "../../sniper/getBlock";
+import { getLatestBlockhash } from "../../sniper/getBlock";
 import logger from "../../../logs/logger";
 
 // Minimum token amount to prevent extremely small transactions
@@ -53,25 +53,25 @@ export const pumpfunSwap = async (
   const { mint, amount, slippage, tip, is_buy, isSellAll = false } = swapParam;
   const shortMint = getTokenShortName(mint);
   const operation = is_buy ? "BUY" : "SELL";
-  
+
   logger.info(`[🧪 PUMPFUN-ATTEMPT] ${shortMint} | Preparing ${operation} transaction | Amount: ${amount.toFixed(6)}`);
-  
+
   try {
     // Validate pumpData existence
     if (!swapParam.pumpData) {
       logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Missing pump data, cannot create transaction`);
       return null;
     }
-    
+
     // Get pump data from params
     const pumpData = swapParam.pumpData;
-    
+
     // Validate critical pump data properties
     if (!pumpData.virtualSolReserves || !pumpData.virtualTokenReserves) {
       logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Invalid pump data: virtualSolReserves=${pumpData.virtualSolReserves}, virtualTokenReserves=${pumpData.virtualTokenReserves}`);
       return null;
     }
-    
+
     // Check for extremely small values in virtual reserves
     if (pumpData.virtualSolReserves < MIN_TOKEN_AMOUNT || pumpData.virtualTokenReserves < MIN_TOKEN_AMOUNT) {
       logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Virtual reserves are too small, might cause calculation errors`);
@@ -80,7 +80,7 @@ export const pumpfunSwap = async (
 
     // Flag to determine if we should close the account in the same transaction
     let safeToCloseAccount = false;
-    
+
     // SAFETY CHECK FOR SELL-ALL: Verify we're actually selling the full balance
     if (!is_buy && isSellAll) {
       try {
@@ -89,10 +89,10 @@ export const pumpfunSwap = async (
           wallet.publicKey.toBase58(),
           mint
         );
-        
+
         // Check if the amount is close enough to the actual balance
         const amountIsComplete = Math.abs(currentBalance - amount) < BALANCE_TOLERANCE;
-        
+
         if (!amountIsComplete) {
           logger.warn(`[⚠️ SAFETY-CHECK] ${shortMint} | isSellAll=true but amount (${amount}) doesn't match balance (${currentBalance}). Account closure will be handled separately.`);
           safeToCloseAccount = false;
@@ -110,7 +110,7 @@ export const pumpfunSwap = async (
     const amountInLamports = is_buy
       ? Math.floor(amount * LAMPORTS_PER_SOL)
       : Math.floor(amount);
-    
+
     logger.info(`[🔢 PUMPFUN-CALC] ${shortMint} | Slippage: ${slippage}%, AmountInLamports: ${amountInLamports}`);
 
     // Get or create token accounts
@@ -124,7 +124,7 @@ export const pumpfunSwap = async (
       wallet.publicKey,
       true
     );
-    
+
     logger.info(`[🔑 PUMPFUN-ACCOUNTS] ${shortMint} | SOL ATA: ${solAta.toString().slice(0, 8)}... | Token ATA: ${splAta.toString().slice(0, 8)}...`);
 
     // Set up transaction keys
@@ -162,7 +162,7 @@ export const pumpfunSwap = async (
     let data: Buffer;
     let tokenOut = 0;
     let minSolOutput = 0;
-    
+
     // Calculate swap amounts based on operation type
     if (is_buy) {
       // Calculate token output for buy operation
@@ -171,18 +171,18 @@ export const pumpfunSwap = async (
           (amountInLamports * pumpData.virtualTokenReserves) /
           pumpData.virtualSolReserves
         );
-        
+
         // Verify calculated output is reasonable
         if (tokenOut < MIN_TOKEN_AMOUNT) {
           logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Calculated tokenOut (${tokenOut}) is too small`);
           return null;
         }
-        
+
         const solInWithSlippage = amount * (1 + slippageValue);
         const maxSolCost = Math.floor(solInWithSlippage * LAMPORTS_PER_SOL);
-        
+
         logger.info(`[🔢 PUMPFUN-BUY-CALC] ${shortMint} | TokenOut: ${tokenOut} | MaxSolCost: ${maxSolCost / LAMPORTS_PER_SOL}`);
-        
+
         data = Buffer.concat([
           bufferFromUInt64("16927863322537952870"),
           bufferFromUInt64(tokenOut),
@@ -199,21 +199,21 @@ export const pumpfunSwap = async (
           logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Virtual token reserves are zero, cannot calculate output`);
           return null;
         }
-        
+
         minSolOutput = Math.floor(
           (amountInLamports *
             (1 - slippageValue) *
             pumpData.virtualSolReserves) /
-            pumpData.virtualTokenReserves
+          pumpData.virtualTokenReserves
         );
-        
+
         // Check if output is reasonable - this affects whether we can safely close the account
         // if (minSolOutput < MIN_TOKEN_AMOUNT) {
         //   logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Calculated minSolOutput (${minSolOutput}) is too small`);
         //   safeToCloseAccount = false;
         //   return null;
         // }
-        
+
         // Check if the output seems unusually small relative to input (might indicate an issue)
         const outputRatio = minSolOutput / amountInLamports;
         if (outputRatio < MIN_OUTPUT_PERCENT) {
@@ -221,9 +221,9 @@ export const pumpfunSwap = async (
           // If output ratio is suspiciously low, don't close account in same transaction
           safeToCloseAccount = false;
         }
-        
+
         logger.info(`[🔢 PUMPFUN-SELL-CALC] ${shortMint} | AmountIn: ${amountInLamports} | MinSolOutput: ${minSolOutput / LAMPORTS_PER_SOL}`);
-        
+
         data = Buffer.concat([
           bufferFromUInt64("12502976635542562355"),
           bufferFromUInt64(amountInLamports),
@@ -245,55 +245,55 @@ export const pumpfunSwap = async (
     // Build transaction instructions
     const instructions: TransactionInstruction[] = is_buy
       ? [
-          // Buy instructions
-          ComputeBudgetProgram.setComputeUnitLimit({
-            units: 100000
-          }),
-          ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: 1000000
-          }),
-          spl.createAssociatedTokenAccountIdempotentInstruction(
-            wallet.publicKey,
-            solAta,
-            wallet.publicKey,
-            spl.NATIVE_MINT
-          ),
-          SystemProgram.transfer({
-            fromPubkey: wallet.publicKey,
-            toPubkey: solAta,
-            lamports: amountInLamports,
-          }),
-          spl.createSyncNativeInstruction(solAta, TOKEN_PROGRAM_ID),
-          spl.createAssociatedTokenAccountIdempotentInstruction(
-            wallet.publicKey,
-            splAta,
-            wallet.publicKey,
-            new PublicKey(mint)
-          ),
-          pumpInstruction,
-          spl.createCloseAccountInstruction(
-            solAta,
-            wallet.publicKey,
-            wallet.publicKey
-          ),
-        ]
+        // Buy instructions
+        ComputeBudgetProgram.setComputeUnitLimit({
+          units: 100000
+        }),
+        ComputeBudgetProgram.setComputeUnitPrice({
+          microLamports: 1000000
+        }),
+        spl.createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey,
+          solAta,
+          wallet.publicKey,
+          spl.NATIVE_MINT
+        ),
+        SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey: solAta,
+          lamports: amountInLamports,
+        }),
+        spl.createSyncNativeInstruction(solAta, TOKEN_PROGRAM_ID),
+        spl.createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey,
+          splAta,
+          wallet.publicKey,
+          new PublicKey(mint)
+        ),
+        pumpInstruction,
+        spl.createCloseAccountInstruction(
+          solAta,
+          wallet.publicKey,
+          wallet.publicKey
+        ),
+      ]
       : [
-          // Sell instructions
-          ComputeBudgetProgram.setComputeUnitLimit({
-            units: 100000
-          }),
-          ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: 1000000
-          }),
-          spl.createAssociatedTokenAccountIdempotentInstruction(
-            wallet.publicKey,
-            splAta,
-            wallet.publicKey,
-            new PublicKey(mint)
-          ),
-          pumpInstruction,
-        ];
-    
+        // Sell instructions
+        ComputeBudgetProgram.setComputeUnitLimit({
+          units: 100000
+        }),
+        ComputeBudgetProgram.setComputeUnitPrice({
+          microLamports: 1000000
+        }),
+        spl.createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey,
+          splAta,
+          wallet.publicKey,
+          new PublicKey(mint)
+        ),
+        pumpInstruction,
+      ];
+
     // Add tip for validator
     logger.info(`[💰 PUMPFUN-TIP] ${shortMint} | Adding tip: ${tip} SOL`);
     const feeInstructions = SystemProgram.transfer({
@@ -316,10 +316,10 @@ export const pumpfunSwap = async (
     } else if (!is_buy && isSellAll) {
       logger.info(`[🔒 PUMPFUN-CLOSE-DEFERRED] ${shortMint} | Will handle account closure separately after transaction confirmation`);
     }
-    
+
     // Get recent blockhash and create transaction
-    const blockhash = getLastValidBlockhash();
-    if (!blockhash) {
+    const latestBlockhash = getLatestBlockhash();
+    if (!latestBlockhash) {
       logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Failed to get recent blockhash`);
       return null;
     }
@@ -328,21 +328,21 @@ export const pumpfunSwap = async (
     logger.info(`[📝 PUMPFUN-TX] ${shortMint} | Building transaction with ${instructions.length} instructions`);
     const messageV0 = new TransactionMessage({
       payerKey: wallet.publicKey,
-      recentBlockhash: blockhash,
+      recentBlockhash: latestBlockhash.blockhash,
       instructions,
     }).compileToV0Message();
-    
+
     // Calculate decimal scale for return values
     const decimal = is_buy ? 10 ** TOKEN_DECIMALS : LAMPORTS_PER_SOL;
-    
+
     // Create versioned transaction
     const vTxn = new VersionedTransaction(messageV0);
     const outAmount = is_buy
       ? Number(tokenOut) / decimal
       : Number(minSolOutput) / decimal;
-    
+
     logger.info(`[✅ PUMPFUN-SUCCESS] ${shortMint} | Transaction created successfully | inAmount: ${amount.toFixed(6)}, outAmount: ${outAmount.toFixed(6)}`);
-    
+
     return {
       vTxn,
       inAmount: amount,
@@ -363,7 +363,7 @@ export function getBuyInstruction(buyParam: BuyInsParam) {
   try {
     const { mint, owner, bondingCurve, associatedBondingCurve, maxSol, splOut } = buyParam;
     const shortMint = getTokenShortName(mint.toBase58());
-    
+
     logger.info(`[🔧 PUMPFUN-BUY-INST] ${shortMint} | Creating buy instruction | splOut: ${splOut}, maxSol: ${maxSol}`);
 
     // Get associated token address for the mint
@@ -407,7 +407,7 @@ export function getBuyInstruction(buyParam: BuyInsParam) {
       programId: PUMP_FUN_PROGRAM,
       data: buyData,
     });
-    
+
     logger.info(`[✅ PUMPFUN-BUY-INST-SUCCESS] ${shortMint} | Buy instructions created successfully`);
     return [createATAInstruction, buyInstruction];
   } catch (error: any) {

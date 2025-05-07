@@ -1,4 +1,4 @@
-import { LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import logger from "../logs/logger";
 import { SniperBotConfig } from "../service/setting/botConfigClass";
 import { connection, wallet } from "../config";
@@ -7,6 +7,7 @@ import {
   TOKEN_PROGRAM_ID,
   TokenAccount,
 } from "@raydium-io/raydium-sdk";
+import * as spl from "@solana/spl-token";
 import {
   getPumpTokenPriceUSD,
   getTokenBalance,
@@ -22,8 +23,10 @@ import {
 } from "../service/tx/TxService";
 import { ITransaction, SniperTxns } from "../models/SniperTxns";
 import { swap } from "../service/swap/swap";
-import { getCachedSolPrice } from "../service/sniper/getBlock";
+import { getLatestBlockhash } from "../service/sniper/getBlock";
 import { getTokenDataforAssets } from "../service/assets/assets";
+import { jito_executeAndConfirm, pumpfun_program, sell } from "../service/sniper/sniperService_update";
+import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 const WSOL = "So11111111111111111111111111111111111111112";
 
@@ -116,14 +119,15 @@ export const getTokenPriceFromJupiter = async (mint: string) => {
   }
 };
 
-export const getSwapAmountByTxHash = async (txHash: string): Promise<{tokenAmount: number, solAmount: number}> => {
+export const getSwapAmountByTxHash = async (txHash: string): Promise<{ tokenAmount: number, solAmount: number }> => {
   try {
     let txn;
-    while(!txn) {
+    while (!txn) {
       txn = await connection.getParsedTransaction(txHash,
-        { maxSupportedTransactionVersion: 0,
+        {
+          maxSupportedTransactionVersion: 0,
           commitment: "confirmed"
-         },
+        },
       );
       sleepTime(2000);
     }
@@ -213,7 +217,7 @@ export async function simulateTxn(txn: VersionedTransaction) {
     console.error("* Simulation Error:", err, logs);
     throw new Error(
       "Simulation txn. Please check your wallet balance and slippage." +
-        err
+      err
     );
   }
 }
@@ -249,106 +253,64 @@ export async function getDexscreenerData(
   }
 }
 
-export const sellTokenSwap = async (mint: string, amount: number, isAlert: boolean, isSellAll: boolean): Promise<string|null> => {
-  const shortMint = mint.slice(0, 8) + '...';
-  
+export const sellTokenSwap = async (mint: string, amount: number, isAlert: boolean, isSellAll: boolean): Promise<string | null> => {
   try {
     if (!isSellAll && amount === 0) {
-      logger.error(`[❌ INVALID-INPUT] ${shortMint} | Cannot sell zero tokens. Operation aborted.`);
-      throw new Error("Amount is zero");
+      console.log(`sellTokenSwap, mint: ${mint}, amount: `)
     }
-    
-    logger.info(`[💰 SELL-REQUEST] ${shortMint} | Amount: ${(amount / 1000_000).toFixed(6)} | isAlert: ${isAlert} | isSellAll: ${isSellAll}`);
-    
-    const botBuyConfig = SniperBotConfig.getBuyConfig();
-    
-    // Get token price and exchange information
-    logger.info(`[📊 PRICE-CHECK] ${shortMint} | Fetching current token price...`);
-    const { price: currentPrice_usd, pumpData, isRaydium } = await getPumpTokenPriceUSD(mint);
-    
-    if (!currentPrice_usd || currentPrice_usd === 0) {
-      logger.error(`[❌ PRICE-ERROR] ${shortMint} | Failed to get valid price information`);
-      return null;
-    }
-    
-    logger.info(`[📈 PRICE-INFO] ${shortMint} | Current price: $${currentPrice_usd.toFixed(6)} | Exchange: ${isRaydium ? "Raydium" : "Pumpfun"}`);
-    
-    // Adjust tip amount based on isSellAll
-    const tipAmount = isSellAll ? botBuyConfig.jitoTipAmount : botBuyConfig.jitoTipAmount * 2;
-    logger.info(`[💵 FEE-INFO] ${shortMint} | Using tip amount: ${tipAmount} SOL`);
-    
-    // Create swap parameters
-    const swapParam: SwapParam = {
-      mint: mint,
-      amount: amount,
-      tip: tipAmount,
-      slippage: botBuyConfig.slippage,
-      is_buy: false,
-      isSellAll: isSellAll,
-      pumpData,
-    };
-    
-    // Execute the swap
-    logger.info(`[🔄 EXECUTING] ${shortMint} | Calling swap function with slippage: ${botBuyConfig.slippage}%`);
-    const swapResult = await swap(swapParam);
-    
-    if (!swapResult) {
-      logger.error(`[❌ SWAP-FAILED] ${shortMint} | The swap function returned null`);
-      return null;
-    }
-    
-    const { txHash, price: executedPrice_usd, inAmount, outAmount, } = swapResult;
-    logger.info(`[✅ SWAP-SUCCESS] ${shortMint} | Swap executed at price: $${executedPrice_usd.toFixed(6)}`);
-    logger.info(`[📝 TX-DETAILS] ${shortMint} | TxHash: ${txHash?.slice(0, 8)}... | In: ${inAmount.toFixed(6)} tokens | Out: ${outAmount.toFixed(6)} SOL`);
-    
-    // For regular (non-sellAll) sells, we need to record the transaction
-    if (!isSellAll && amount > 0) {
-      // Lookup the buy transaction to calculate profit
-      const buyTxn = await SniperTxns.findOne({
-        mint: mint,
-        swap: "BUY",
-      });
-      
-      if (!buyTxn) {
-        logger.warn(`[⚠️ NO-BUY-RECORD] ${shortMint} | No buy transaction found for this token`);
+    if (isSellAll && amount < 1000) {
+      // close token account
+      const splAta = spl.getAssociatedTokenAddressSync(
+        new PublicKey(mint),
+        wallet.publicKey,
+        true
+      );
+      const closeAccountInst = spl.createCloseAccountInstruction(
+        splAta,
+        wallet.publicKey,
+        wallet.publicKey
+      );
+      const latestBlockhash = getLatestBlockhash();
+      if (!latestBlockhash) {
+        logger.error(`[❌ CLOSE-ERROR] ${mint}} | Failed to get blockhash for account closure`);
+        return null;
       }
-      
-      const investedPrice_usd = buyTxn?.swapPrice_usd || 0;
-      const profit = (Number(executedPrice_usd - investedPrice_usd) * amount) / 1000_000;
-      const profitPercent = Number(executedPrice_usd / investedPrice_usd - 1) * 100;
-      
-      logger.info(`[💹 PROFIT-CALC] ${shortMint} | Buy price: $${investedPrice_usd.toFixed(6)} | Profit: $${profit.toFixed(2)} (${profitPercent.toFixed(2)}%)`);
-      
-      const solPrice = getCachedSolPrice();
-      
-      // Prepare transaction data for database
-      const save_data: ITxntmpData = {
-        isAlert: isAlert,
-        txHash: txHash || "",
-        mint: mint,
-        swap: "SELL",
-        swapPrice_usd: executedPrice_usd,
-        swapAmount: inAmount,
-        swapFee_usd: tipAmount * solPrice,
-        swapProfit_usd: profit,
-        swapProfitPercent_usd: profitPercent,
-        dex: "Pumpfun"
-      };
-      
-      // Save transaction to database
-      logger.info(`[💾 SAVING-TX] ${shortMint} | Recording transaction in database`);
-      await saveTXonDB(save_data);
-    } else if (swapResult) {
-      // For sellAll operations, we don't need detailed profit calculations
-      logger.info(`[🔥 CLEANUP] ${shortMint} | Token cleaned up successfully with sellAll option`);
+      const closeMsg = new TransactionMessage({
+        payerKey: wallet.publicKey,
+        recentBlockhash: latestBlockhash.blockhash,
+        instructions: [closeAccountInst],
+      }).compileToV0Message();
+      const closeTx = new VersionedTransaction(closeMsg);
+      closeTx.sign([wallet]);
+      const result = await jito_executeAndConfirm(closeTx, wallet, latestBlockhash, 100000);
+      let txHash = "";
+      if (result.confirmed) {
+        txHash = bs58.encode(closeTx.signatures[0]);
+      }
+      return txHash;
     }
-    
-    return txHash;
+    const botBuyConfig = SniperBotConfig.getBuyConfig();
+    const jito_tip = isSellAll ? botBuyConfig.jitoTipAmount : botBuyConfig.jitoTipAmount * 2;
+    const associatedBondingCurve = await spl.getAssociatedTokenAddress(
+      new PublicKey(mint),
+      getBondingCurvePDA(new PublicKey(mint)),
+      true
+    );
+    const associatedUser = await spl.getAssociatedTokenAddress(new PublicKey(mint), wallet.publicKey, false);
+    const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
+    return signature;
   } catch (error: any) {
-    logger.error(`[❌ SELL-ERROR] ${shortMint} | Error during sellTokenSwap: ${error.message}`);
+    logger.error(`[❌ SELL-ERROR] ${mint} | Error during sellTokenSwap: ${error.message}`);
     if (error.stack) {
-      logger.error(`[❌ STACK-TRACE] ${shortMint} | ${error.stack.split('\n')[0]}`);
+      logger.error(`[❌ STACK-TRACE] ${mint} | ${error.stack.split('\n')[0]}`);
     }
     return null;
   }
 };
+
+const getBondingCurvePDA = (mint: PublicKey) => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("bonding-curve"), mint.toBuffer()],
+    pumpfun_program.programId
+  )[0];
+}
