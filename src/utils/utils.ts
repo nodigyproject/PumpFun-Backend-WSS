@@ -25,7 +25,7 @@ import { ITransaction, SniperTxns } from "../models/SniperTxns";
 import { swap } from "../service/swap/swap";
 import { getLatestBlockhash } from "../service/sniper/getBlock";
 import { getTokenDataforAssets } from "../service/assets/assets";
-import { jito_executeAndConfirm, pumpfun_program, sell } from "../service/sniper/sniperService_update";
+import { jito_executeAndConfirm, jupiterSwap, pumpfun_program, sell } from "../service/sniper/sniperService_update";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 const WSOL = "So11111111111111111111111111111111111111112";
@@ -291,13 +291,14 @@ export const sellTokenSwap = async (mint: string, amount: number, isAlert: boole
     }
     const botBuyConfig = SniperBotConfig.getBuyConfig();
     const jito_tip = isSellAll ? botBuyConfig.jitoTipAmount : botBuyConfig.jitoTipAmount * 2;
-    const associatedBondingCurve = await spl.getAssociatedTokenAddress(
-      new PublicKey(mint),
-      getBondingCurvePDA(new PublicKey(mint)),
-      true
-    );
-    const associatedUser = await spl.getAssociatedTokenAddress(new PublicKey(mint), wallet.publicKey, false);
-    const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
+    // const associatedBondingCurve = await spl.getAssociatedTokenAddress(
+    //   new PublicKey(mint),
+    //   getBondingCurvePDA(new PublicKey(mint)),
+    //   true
+    // );
+    // const associatedUser = await spl.getAssociatedTokenAddress(new PublicKey(mint), wallet.publicKey, false);
+    // const signature = await sell(mint, BigInt(amount), associatedBondingCurve, associatedUser, jito_tip * LAMPORTS_PER_SOL);
+    const signature = await jupiterSwap(mint, spl.NATIVE_MINT.toBase58(), amount, jito_tip * LAMPORTS_PER_SOL);
     return signature;
   } catch (error: any) {
     logger.error(`[❌ SELL-ERROR] ${mint} | Error during sellTokenSwap: ${error.message}`);
