@@ -38,7 +38,7 @@ const TransactionSchema = new Schema({
   swapProfitPercent_usd: { type: Number },
   buyMC_usd: { type: Number },
   date: { type: Number, default: Date.now },
-  dex: { type: String, enum: ["Pumpswap", "Pumpfun"] },
+  dex: { type: String, enum: ["Pumpfun Amm", "Pumpfun"] },
   sellReason: { type: String }
 });
 

@@ -391,7 +391,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                   swapProfitPercent_usd: 0,
                   buyMC_usd: marketCapSol,
                   dex: "Pumpfun",
-                  date: Date.now()
+                  date: Date.now(),
+                  sellReason: ""
                 }
               },
               {
@@ -504,7 +505,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                               buyMC_usd: marketCapSol,
                               dex: "Pumpfun",
                               date: Date.now(),
-                              sellReason: "by duration"
+                              sellReason: "by DURATION"
                             }
                           },
                           {
@@ -574,7 +575,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                               buyMC_usd: marketCapSol,
                               dex: "Pumpfun",
                               date: Date.now(),
-                              sellReason: "by loss"
+                              sellReason: "by LOSS"
                             }
                           },
                           {
@@ -653,7 +654,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                                 buyMC_usd: marketCapSol,
                                 dex: "Pumpfun",
                                 date: Date.now(),
-                                sellReason: `step ${i + 1}`
+                                sellReason: `by STEP ${i + 1}`
                               }
                             },
                             {
@@ -752,7 +753,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                               buyMC_usd: marketCapSol,
                               dex: "Pumpfun Amm",
                               date: Date.now(),
-                              sellReason: "by loss"
+                              sellReason: "by LOSS"
                             }
                           },
                           {
@@ -827,7 +828,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                                 buyMC_usd: marketCapSol,
                                 dex: "Pumpfun Amm",
                                 date: Date.now(),
-                                sellReason: `step ${i + 1}`
+                                sellReason: `by STEP ${i + 1}`
                               }
                             },
                             {
