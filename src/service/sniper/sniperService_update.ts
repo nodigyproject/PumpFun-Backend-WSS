@@ -505,7 +505,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                               buyMC_usd: marketCapSol,
                               dex: "Pumpfun",
                               date: Date.now(),
-                              sellReason: "by DURATION"
+                              sellReason: "duration"
                             }
                           },
                           {
@@ -575,7 +575,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                               buyMC_usd: marketCapSol,
                               dex: "Pumpfun",
                               date: Date.now(),
-                              sellReason: "by LOSS"
+                              sellReason: "loss"
                             }
                           },
                           {
@@ -654,7 +654,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                                 buyMC_usd: marketCapSol,
                                 dex: "Pumpfun",
                                 date: Date.now(),
-                                sellReason: `by STEP ${i + 1}`
+                                sellReason: `step ${i + 1}`
                               }
                             },
                             {
@@ -753,7 +753,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                               buyMC_usd: marketCapSol,
                               dex: "Pumpfun Amm",
                               date: Date.now(),
-                              sellReason: "by LOSS"
+                              sellReason: "loss"
                             }
                           },
                           {
@@ -828,7 +828,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
                                 buyMC_usd: marketCapSol,
                                 dex: "Pumpfun Amm",
                                 date: Date.now(),
-                                sellReason: `by STEP ${i + 1}`
+                                sellReason: `step ${i + 1}`
                               }
                             },
                             {
