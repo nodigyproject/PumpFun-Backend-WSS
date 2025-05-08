@@ -2,7 +2,6 @@ import { Router } from "express";
 import logger from "../../logs/logger";
 import { config, wallet } from "../../config";
 import { ITransaction, SniperTxns } from "../../models/SniperTxns";
-import { getCachedSolPrice } from "../../service/sniper/getBlock";
 import {
   ITokenAnalysisData,
 } from "../../utils/types";
@@ -112,10 +111,8 @@ router.get("/", async (req, res) => {
 router.get("/wallet", async (req, res) => {
   try {
     const solBalance = await getSolBananceFromWallet(wallet);
-    const solPice = getCachedSolPrice();
     res.json({
       walletBal: solBalance,
-      solPrice: solPice,
     });
   } catch (error: any) {
     logger.error(

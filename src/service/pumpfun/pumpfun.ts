@@ -29,7 +29,6 @@ import { JitoAccounts } from "../swap/jito/jito";
 import { BN } from "bn.js"; // Import BN class as a value
 import base58 from "bs58";
 import { connection } from "../../config";
-import { getCachedSolPrice } from "../sniper/getBlock";
 import { formatAmmKeysById } from "../swap/raydium/formatAmmByKeyId";
 import {
   jsonInfo2PoolKeys,
@@ -131,10 +130,7 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
   const initialRealTokenReserves = Number(totalSupply) - CONSTANT_VALUE;
   const progress = 100 - (leftTokens * 100) / initialRealTokenReserves;
   
-  const solPrice = getCachedSolPrice();
-  if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Current SOL price: $${solPrice}`);
-  
-  const price = (solPrice * Number(virtualSolReserves)) / 
+  const price = (Number(virtualSolReserves)) / 
                LAMPORTS_PER_SOL / 
                (Number(virtualTokenReserves) / 10 ** TOKEN_DECIMALS);
   
@@ -234,7 +230,6 @@ export async function getPumpTokenPriceUSD(mint: string): Promise<{
     } else {
       price = currentPrice.numerator.mul(new BN(LAMPORTS_PER_SOL)).div(currentPrice.denominator).toNumber() * 10 ** decimalsDiff / LAMPORTS_PER_SOL;      
     }
-    price *=  getCachedSolPrice();
     tokenPriceMap.set(mint, price);
     // console.log("raydium price", price);
     return { price, isRaydium: true };

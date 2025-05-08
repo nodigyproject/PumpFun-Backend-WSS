@@ -306,11 +306,10 @@ export const swap = async (
 
         // For burn operations, set reasonable defaults for the response
         if (swapMethod.includes("tokenClose")) {
-          const solPrice = getCachedSolPrice();
           logger.info(`[🔥 BURN-COMPLETE] ${shortMint} | Token successfully burned | Amount: ${formatTokenAmount(amount)}`);
           return {
             txHash,
-            price: is_buy ? 0 : price || solPrice, // Use cached SOL price as fallback
+            price: is_buy ? 0 : price, // Use cached SOL price as fallback
             inAmount: amount,
             outAmount: 0, // For burn operations, there's no output amount
             closeAccountTxHash // Include close account txn hash if available
