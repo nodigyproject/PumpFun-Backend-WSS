@@ -105,6 +105,7 @@ router.get("/", async (req, res) => {
           buyMC_usd: cacheData.buyMC_usd,
           date: item.date,
           dex: item.dex,
+          sellReason: item.sellReason
         };
       })
     );
