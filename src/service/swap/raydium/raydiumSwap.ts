@@ -15,7 +15,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { getLatestBlockhash } from "../../sniper/getBlock";
+// import { getLatestBlockhash } from "../../sniper/getBlock";
 import { JitoAccounts } from "../jito/jito";
 import {
   jsonInfo2PoolKeys,
@@ -142,7 +142,8 @@ export const raydiumSwap = async (
     );
   }
 
-  const latestBlockhash = getLatestBlockhash();
+  // const latestBlockhash = getLatestBlockhash();
+  const latestBlockhash = await connection.getLatestBlockhash();
   if (!latestBlockhash) {
     console.error("Failed to retrieve blockhash from cache");
     throw new Error("Failed to retrieve blockhash from cache");

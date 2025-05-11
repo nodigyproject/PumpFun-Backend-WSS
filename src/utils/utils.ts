@@ -23,7 +23,7 @@ import {
 } from "../service/tx/TxService";
 import { ITransaction, SniperTxns } from "../models/SniperTxns";
 import { swap } from "../service/swap/swap";
-import { getLatestBlockhash } from "../service/sniper/getBlock";
+// import { getLatestBlockhash } from "../service/sniper/getBlock";
 import { getTokenDataforAssets } from "../service/assets/assets";
 import { jito_executeAndConfirm, jupiterSwap, pumpfun_program, sell } from "../service/sniper/sniperService_update";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
@@ -270,7 +270,9 @@ export const sellTokenSwap = async (mint: string, amount: number, isAlert: boole
         wallet.publicKey,
         wallet.publicKey
       );
-      const latestBlockhash = getLatestBlockhash();
+      // const latestBlockhash = getLatestBlockhash();
+      const latestBlockhash = await connection.getLatestBlockhash();
+
       if (!latestBlockhash) {
         logger.error(`[❌ CLOSE-ERROR] ${mint}} | Failed to get blockhash for account closure`);
         return null;

@@ -6,7 +6,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { wallet } from "../../config";
+import { connection, wallet } from "../../config";
 import { JitoAccounts } from "./jito/jito";
 import {
   createBurnCheckedInstruction,
@@ -14,7 +14,7 @@ import {
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { TOKEN_DECIMALS } from "../../utils/constants";
-import { getLatestBlockhash } from "../sniper/getBlock";
+// import { getLatestBlockhash } from "../sniper/getBlock";
 
 export const tokenClose = async (
   mint: string,
@@ -58,7 +58,8 @@ export const tokenClose = async (
       )
     )
   }
-  const latestBlockhash = getLatestBlockhash();
+  // const latestBlockhash = getLatestBlockhash();
+  const latestBlockhash = await connection.getLatestBlockhash();
 
   const messageV0 = new TransactionMessage({
     payerKey: wallet.publicKey,

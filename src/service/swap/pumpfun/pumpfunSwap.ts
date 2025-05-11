@@ -27,7 +27,7 @@ import {
   RENT,
   TOKEN_DECIMALS,
 } from "../../../utils/constants";
-import { getLatestBlockhash } from "../../sniper/getBlock";
+// import { getLatestBlockhash } from "../../sniper/getBlock";
 import logger from "../../../logs/logger";
 
 // Minimum token amount to prevent extremely small transactions
@@ -318,7 +318,8 @@ export const pumpfunSwap = async (
     }
 
     // Get recent blockhash and create transaction
-    const latestBlockhash = getLatestBlockhash();
+    // const latestBlockhash = getLatestBlockhash();
+    const latestBlockhash = await connection.getLatestBlockhash();
     if (!latestBlockhash) {
       logger.error(`[❌ PUMPFUN-ERROR] ${shortMint} | Failed to get recent blockhash`);
       return null;

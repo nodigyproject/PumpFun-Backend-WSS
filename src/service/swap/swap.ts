@@ -10,7 +10,7 @@ import { tokenClose } from "./tokenClose";
 import * as spl from "@solana/spl-token";
 import { PublicKey, TransactionMessage } from "@solana/web3.js";
 import { getTokenBalance } from "../pumpfun/pumpfun";
-import { getLatestBlockhash } from "../sniper/getBlock";
+// import { getLatestBlockhash } from "../sniper/getBlock";
 
 // Small amount threshold for automatic burning instead of selling (in token units)
 const DUST_AMOUNT_THRESHOLD = 0.0001;
@@ -117,7 +117,8 @@ async function handleAccountClosure(mint: string) {
     );
 
     // Create and send the transaction
-    const latestBlockhash = getLatestBlockhash();
+    // const latestBlockhash = getLatestBlockhash();
+    const latestBlockhash = await connection.getLatestBlockhash();
     if (!latestBlockhash) {
       logger.error(`[❌ CLOSE-ERROR] ${shortMint} | Failed to get blockhash for account closure`);
       return null;

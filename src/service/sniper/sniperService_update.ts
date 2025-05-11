@@ -346,8 +346,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
               .transaction()
           );
 
-          // const blockHash = await connection.getLatestBlockhash();
-          const blockHash = getLatestBlockhash();
+          const blockHash = await connection.getLatestBlockhash();
+          // const blockHash = getLatestBlockhash();
 
           let messageV0 = new TransactionMessage({
             payerKey: wallet.publicKey,
@@ -1096,8 +1096,8 @@ export const sell = async (mint: string, sell_amount: bigint, associatedBondingC
       .transaction()
   );
 
-  // const blockHash = await connection.getLatestBlockhash();
-  const latestBlockhash = getLatestBlockhash();
+  const latestBlockhash = await connection.getLatestBlockhash();
+  // const latestBlockhash = getLatestBlockhash();
 
   let messageV0 = new TransactionMessage({
     payerKey: wallet.publicKey,
@@ -1180,7 +1180,8 @@ export const jupiterSwap = async (inputMint: string, outMint: string, inputAmoun
   // sign the transaction
   trx.sign([wallet]);
   const txSignature = base58.encode(trx.signatures[0]);
-  const latestBlockHash = getLatestBlockhash();
+  // const latestBlockHash = getLatestBlockhash();
+  const latestBlockHash = await connection.getLatestBlockhash();
   const result = await jito_executeAndConfirm(trx, wallet, latestBlockHash, jitoTip);
   if (result.confirmed) {
     return txSignature;

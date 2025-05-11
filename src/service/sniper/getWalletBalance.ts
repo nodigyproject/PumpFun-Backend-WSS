@@ -5,10 +5,15 @@ import { getSolBananceFromWallet } from "../assets/assets";
 let balanceCache = 0;
 export async function startBalanceMonitor() {
   logger.info("Start monitoring wallet balance...");
-  balanceCache = await getSolBananceFromWallet(wallet);
+  const balance = await getSolBananceFromWallet(wallet);
+  if (balance) {
+    balanceCache = balance;
+  }
+  console.log('start balance : ', balance);
   setInterval(async () => {
     const balance = await getSolBananceFromWallet(wallet);
-    balanceCache = balance;
+    if (balance)
+      balanceCache = balance;
   }, 1 * 60 * 1000); // Check every minute
 }
 

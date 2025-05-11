@@ -42,7 +42,7 @@ export const getSolBananceFromWallet = async (wallet: Keypair) => {
     return solBalance / LAMPORTS_PER_SOL;
   } catch (error) {
     logger.error("getSolBananceFromWallet error" + error);
-    return 0;
+    return null;
   }
 };
 

@@ -405,7 +405,7 @@ const monitorToken = async (
 ) => {
   const shortMint = mint.slice(0, 8) + '...';
   logger.info(`[🔍 MONITOR-TOKEN] ${shortMint} | Starting buy monitoring`);
-  getLatestBlockhash()
+  // getLatestBlockhash()
   // Add to global buying map
   tokenBuyingMap.set(mint, Date.now());
 
