@@ -162,17 +162,17 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
       const result = tOutPut(data);
       const mint = result.meta.postTokenBalances[0].mint;
-      // console.log(`New Token : `, mint);
-      // const signature = result.signature;
-      // console.log('signature = ', signature);
+      console.log(`New Token : `, mint);
+      const signature = result.signature;
+      console.log('signature = ', signature);
       const dev = result.message.accountKeys[0];
-      // console.log('Dev wallet : ', dev);
+      console.log('Dev wallet : ', dev);
       const bondingCurve = result.message.accountKeys[2];
-      // console.log('bondingCurve = ', bondingCurve);
+      console.log('bondingCurve = ', bondingCurve);
       const associatedBondingCurve = result.message.accountKeys[3];
-      // console.log('associatedBondingCurve = ', associatedBondingCurve);
+      console.log('associatedBondingCurve = ', associatedBondingCurve);
       const devBuySol = (result.meta.preBalances[0] - result.meta.postBalances[0]) / LAMPORTS_PER_SOL;
-      // console.log('dev buy sol = ', devBuySol);
+      console.log('dev buy sol = ', devBuySol);
 
       // 4. check devBuySol
       const devBuySetting = SniperBotConfig.getMaxDevBuyAmount();
@@ -193,7 +193,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
         tokenSymbol = metaPlexData.symbol;
         tokenImage = metaPlexData.json?.image || '';
       } catch (error) {
-        console.log(`get token meta data failed ${mint}`);
+        console.log(`[${mint}] Get token meta data failed , error`, error);
       }
 
       if (SniperBotConfig.getBuyConfig().duplicates.enabled === true) {
@@ -207,15 +207,21 @@ async function handleStream(client: Client, args: SubscribeRequest) {
       }
 
       // save token to db
-      const tokenData: Partial<IToken> = {
-        mint,
-        tokenName,
-        tokenSymbol,
-        tokenImage,
-        saveTime: Date.now(),
-      };
-      const newToken = new DBTokenList(tokenData);
-      newToken.save();
+      if (tokenName && tokenSymbol && tokenImage) {
+        try {
+          const tokenData: Partial<IToken> = {
+            mint,
+            tokenName,
+            tokenSymbol,
+            tokenImage,
+            saveTime: Date.now(),
+          };
+          const newToken = new DBTokenList(tokenData);
+          newToken.save();
+        } catch (error) {
+          console.error(`[${mint}] save token data failed. error:  ${error}`);
+        }
+      }
 
       // monitor token's status
       const create_time = Date.now();
@@ -939,7 +945,7 @@ const getBondingCurveStatus = async (connection: Connection, bondingCurve: Publi
     const virtualSolReserves = BigInt(value.virtualSolReserves);
     const realSolReserves = BigInt(value.realSolReserves);
     const realTokenReserves = BigInt(value.realTokenReserves);
-    const completed = BigInt(value.complete);
+    const completed = value.complete;
 
     return { completed, realSolReserves, realTokenReserves, virtualSolReserves, virtualTokenReserves };
 

@@ -4,12 +4,12 @@ import { getSolBananceFromWallet } from "../assets/assets";
 
 let balanceCache = 0;
 export async function startBalanceMonitor() {
-  logger.info("Start monitoring wallet balance...");
+  // logger.info("Start monitoring wallet balance...");
   const balance = await getSolBananceFromWallet(wallet);
   if (balance) {
     balanceCache = balance;
   }
-  console.log('start balance : ', balance);
+  console.log('Wallet balance interval check : ', balance);
   setInterval(async () => {
     const balance = await getSolBananceFromWallet(wallet);
     if (balance)
