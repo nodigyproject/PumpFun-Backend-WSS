@@ -31,7 +31,7 @@ import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import { struct, bool, u64, Layout } from "@coral-xyz/borsh";
 import * as spl from "@solana/spl-token";
 import { SniperTxns } from "../../models/SniperTxns";
-import { getLatestBlockhash } from "./getBlock";
+// import { getLatestBlockhash } from "./getBlock";
 
 dotenv.config();
 

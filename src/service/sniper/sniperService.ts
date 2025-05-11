@@ -6,7 +6,7 @@ import { getPumpData, getTokenBalance, getPumpDataWithRetry } from "../pumpfun/p
 import { PUMPFUN_IMG, TOKEN_DECIMALS, TOTAL_SUPPLY } from "../../utils/constants";
 import { swap } from "../swap/swap";
 import { saveTXonDB } from "../tx/TxService";
-import { getLatestBlockhash } from "./getBlock";
+// import { getLatestBlockhash } from "./getBlock";
 import logger from "../../logs/logger";
 import { SwapParam, ITxntmpData, IAlertMsg, PumpData } from "../../utils/types";
 import {
