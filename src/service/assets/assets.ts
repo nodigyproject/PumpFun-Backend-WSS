@@ -3,7 +3,7 @@ import { AccountLayout, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { connection, metaplex, wallet } from "../../config";
 import { SniperTxns } from "../../models/SniperTxns";
 import { TokenAnalysis } from "./tokenAnalysisService";
-import { getPumpTokenPriceUSD } from "../pumpfun/pumpfun";
+import { getPumpTokenPriceInSOL } from "../pumpfun/pumpfun";
 import { ITokenAnalysisData } from "../../utils/types";
 import { TOTAL_SUPPLY } from "../../utils/constants";
 import logger from "../../logs/logger";
@@ -73,7 +73,7 @@ export const getTokenDataforAssets = async (
   const txCount = await SniperTxns.countDocuments({ mint: mint });
   if (txCount === 0) return null; // there is no transaction for this mint
 
-  const tmp = await getPumpTokenPriceUSD(mint);
+  const tmp = await getPumpTokenPriceInSOL(mint);
   let cacheData: ITokenAnalysisData = TokenAnalysis.getTokenAnalysis(mint) || {
     mint: mint,
     tokenName: "",
@@ -103,7 +103,7 @@ export const getTokenDataforAssets = async (
     currentPrice_usd = tmp?.price || 0; //
   }
   // @ts-ignore
-  const dex = (cacheData.currentAmount === 0 ? lastSellTxn?.dex : tmp?.isRaydium ? "Raydium" : "Pumpfun") || "Pumpfun";
+  const dex = (cacheData.currentAmount === 0 ? lastSellTxn?.dex : tmp?.isPumpswap ? "Pumpfun Amm" : "Pumpfun") || "Pumpfun";
 
   if (
     cacheData.tokenName === "UNKNOWN" ||

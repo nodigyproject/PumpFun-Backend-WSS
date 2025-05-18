@@ -9,7 +9,7 @@ import {
 } from "@raydium-io/raydium-sdk";
 import * as spl from "@solana/spl-token";
 import {
-  getPumpTokenPriceUSD,
+  getPumpTokenPriceInSOL,
   getTokenBalance,
 } from "../service/pumpfun/pumpfun";
 import { PUMP_FUN_PROGRAM, TOTAL_SUPPLY } from "./constants";
@@ -236,7 +236,7 @@ export async function getWalletTokenAccount(): Promise<TokenAccount[]> {
   }));
 }
 export async function getCurrentUSDMC(mint: string): Promise<number> {
-  const { price } = await getPumpTokenPriceUSD(mint);
+  const { price } = await getPumpTokenPriceInSOL(mint);
   return price * TOTAL_SUPPLY;
 }
 

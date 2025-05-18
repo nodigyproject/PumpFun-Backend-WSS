@@ -118,7 +118,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
       // 1. check bot running status
       if (!isRunning()) {
-        console.log('Bot is not running.');
+        // console.log('Bot is not running.');
         return;
       }
 
@@ -161,6 +161,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
       }
 
       const result = tOutPut(data);
+      console.log('resut: ', result);
       const mint = result.meta.postTokenBalances[0].mint;
       console.log(`New Token : `, mint);
       const signature = result.signature;
@@ -171,6 +172,9 @@ async function handleStream(client: Client, args: SubscribeRequest) {
       console.log('bondingCurve = ', bondingCurve);
       const associatedBondingCurve = result.message.accountKeys[3];
       console.log('associatedBondingCurve = ', associatedBondingCurve);
+
+
+
       const devBuySol = (result.meta.preBalances[0] - result.meta.postBalances[0]) / LAMPORTS_PER_SOL;
       console.log('dev buy sol = ', devBuySol);
 

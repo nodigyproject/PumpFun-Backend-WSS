@@ -1,7 +1,7 @@
 import { LiquidityPoolKeys } from "@raydium-io/raydium-sdk";
 import { START_TXT, wallet } from "../../config";
 import { ITransaction, SniperTxns } from "../../models/SniperTxns";
-import { getPumpTokenPriceUSD, getTokenBalance } from "../pumpfun/pumpfun";
+import { getPumpTokenPriceInSOL, getTokenBalance } from "../pumpfun/pumpfun";
 import { getWalletTokens } from "../assets/assets";
 import { SniperBotConfig } from "../setting/botConfigClass";
 import logger from "../../logs/logger";
@@ -118,7 +118,7 @@ export const tokenMonitorThread2Sell = async (mint: string, buyTxInfo?: Partial<
     logger.info(`[📊 INFO] ${shortMint} | Age: ${formatTimeElapsed(tokenAge)} | Buy Price: $${investedPrice_usd.toFixed(6)} | Initial Amount: ${(investedAmount / 10 ** TOKEN_DECIMALS).toFixed(4)} | Sell History: ${selling_step} txns`);
 
     try {
-      const { price: initialPrice_usd } = await getPumpTokenPriceUSD(mint);
+      const { price: initialPrice_usd } = await getPumpTokenPriceInSOL(mint);
       
       // Initialize PriceMonitor once, outside of the MonitorThread
       const botSellConfig = SniperBotConfig.getSellConfig();
@@ -161,7 +161,7 @@ export const tokenMonitorThread2Sell = async (mint: string, buyTxInfo?: Partial<
           }
 
           try {
-            const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mint);
+            const { price: currentPrice_usd } = await getPumpTokenPriceInSOL(mint);
             
             // Log periodic detailed status (every 5 minutes)
             if (Math.floor(now / 300000) % 1 === 0 && Math.floor(now / 1000) % 300 < 1) {

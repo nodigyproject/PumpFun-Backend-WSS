@@ -81,7 +81,7 @@ export interface ITxntmpData {
   swapFee_usd: number;
   swapProfit_usd?: number;
   swapProfitPercent_usd?: number;
-  dex: "Raydium" | "Pumpfun";
+  dex: "Pumpfun Amm" | "Pumpfun";
 }
 
 export interface ISwapTxResponse {
@@ -127,7 +127,7 @@ export interface ITokenAnalysisData {
     // tokenAmount?: number;
   };
   sellingStep?: number;
-  dex?: "Raydium" | "Pumpfun";
+  dex?: "Pumpfun Amm" | "Pumpfun";
   revenue?: number;
   realisedProfit?: number;
   unRealizedProfit?: number;

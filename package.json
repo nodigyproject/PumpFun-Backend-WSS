@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node dist/index.js",
     "build": "tsc",
-    "dev": "nodemon src/index.ts"
+    "dev": "nodemon src/index.ts",
+    "test": "ts-node src/test.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.0",

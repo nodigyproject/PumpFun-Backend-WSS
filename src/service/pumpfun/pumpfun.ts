@@ -50,19 +50,19 @@ const tokenPriceMap: Map<string, number> = new Map();
 export async function getPumpData(mint: PublicKey, logging: boolean = false): Promise<PumpData | null> {
   const shortMint = mint.toString().slice(0, 8) + '...';
   if (logging) logger.info(`[🔍 PUMP-DATA] ${mint.toString()} | Attempting to get pump data`);
-  
+
   const mint_account = mint.toBuffer();
   const [bondingCurve] = PublicKey.findProgramAddressSync(
     [Buffer.from("bonding-curve"), mint_account],
     PUMP_FUN_PROGRAM
   );
   if (logging) logger.info(`[🔍 PUMP-DATA] ${shortMint} | Derived bonding curve: ${bondingCurve.toString().slice(0, 8)}...`);
-  
+
   const [associatedBondingCurve] = PublicKey.findProgramAddressSync(
     [bondingCurve.toBuffer(), spl.TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
     spl.ASSOCIATED_TOKEN_PROGRAM_ID
   );
-  
+
   const PUMP_CURVE_STATE_OFFSETS = {
     VIRTUAL_TOKEN_RESERVES: 0x08,
     VIRTUAL_SOL_RESERVES: 0x10,
@@ -70,25 +70,25 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
     REAL_SOL_RESERVES: 0x20,
     TOTAL_SUPPLY: 0x28,
   };
-  
+
   const response = await connection.getAccountInfo(bondingCurve);
   if (response === null) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | No account info found for bonding curve`);
     return null;
   }
-  
+
   if (logging) logger.info(`[✅ PUMP-DATA] ${shortMint} | Successfully retrieved account info`);
-  
+
   // Validate discriminator
   const BONDING_CURVE_DISCRIMINATOR = Buffer.from([0x17, 0xb7, 0xf8, 0x37, 0x60, 0xd8, 0xac, 0x60]);
   const accountDataDiscriminator = response.data.slice(0, 8);
   const isValidDiscriminator = Buffer.compare(Buffer.from(accountDataDiscriminator), BONDING_CURVE_DISCRIMINATOR) === 0;
-  
+
   if (!isValidDiscriminator) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | Invalid bonding curve discriminator`);
     return null;
   }
-  
+
   // Use your existing readBigUintLE function instead of DataView
   const virtualTokenReserves = readBigUintLE(
     response.data,
@@ -96,26 +96,26 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
     8
   );
   if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualTokenReserves: ${virtualTokenReserves}`);
-  
+
   const virtualSolReserves = readBigUintLE(
     response.data,
     PUMP_CURVE_STATE_OFFSETS.VIRTUAL_SOL_RESERVES,
     8
   );
   if (logging) logger.info(`[📊 PUMP-DATA] ${shortMint} | virtualSolReserves: ${virtualSolReserves}`);
-  
+
   const realTokenReserves = readBigUintLE(
     response.data,
     PUMP_CURVE_STATE_OFFSETS.REAL_TOKEN_RESERVES,
     8
   );
-  
+
   const realSolReserves = readBigUintLE(
     response.data,
     PUMP_CURVE_STATE_OFFSETS.REAL_SOL_RESERVES,
     8
   );
-  
+
   const totalSupply = readBigUintLE(
     response.data,
     PUMP_CURVE_STATE_OFFSETS.TOTAL_SUPPLY,
@@ -124,26 +124,26 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
 
   // Use JavaScript number operations instead of BigInt literals
   const CONSTANT_VALUE = 206900000; // Instead of 206900000n
-  
+
   // Convert to numbers for calculations (since you're already doing this in your original code)
   const leftTokens = Number(realTokenReserves) - CONSTANT_VALUE;
   const initialRealTokenReserves = Number(totalSupply) - CONSTANT_VALUE;
   const progress = 100 - (leftTokens * 100) / initialRealTokenReserves;
-  
-  const price = (Number(virtualSolReserves)) / 
-               LAMPORTS_PER_SOL / 
-               (Number(virtualTokenReserves) / 10 ** TOKEN_DECIMALS);
-  
+
+  const price = (Number(virtualSolReserves)) /
+    LAMPORTS_PER_SOL /
+    (Number(virtualTokenReserves) / 10 ** TOKEN_DECIMALS);
+
   const marketCap = (price * Number(totalSupply)) / 10 ** TOKEN_DECIMALS;
   if (logging) logger.info(`[💰 PUMP-DATA] ${shortMint} | Calculated price: $${price.toFixed(8)}, Market Cap: $${marketCap.toFixed(2)}`);
 
-  if(Number(virtualSolReserves) === 0 || Number(virtualTokenReserves) === 0) {
+  if (Number(virtualSolReserves) === 0 || Number(virtualTokenReserves) === 0) {
     if (logging) logger.warn(`[❌ PUMP-DATA] ${shortMint} | Returning null due to zero reserves`);
     return null;
   }
-  
+
   if (logging) logger.info(`[✅ PUMP-DATA] ${shortMint} | Successfully created pump data object`);
-  
+
   return {
     bondingCurve,
     associatedBondingCurve,
@@ -158,7 +158,7 @@ export async function getPumpData(mint: PublicKey, logging: boolean = false): Pr
 
 export async function getPumpDataWithRetry(mint: PublicKey, retries = 3, delay = 1000, logging = false): Promise<PumpData | null> {
   let attempt = 0;
-  
+
   while (attempt <= retries) {
     if (attempt > 0) {
       if (logging) logger.info(`[🔄 RETRY] ${mint.toString().slice(0, 8)}... | Attempt ${attempt}/${retries} after ${delay}ms delay`);
@@ -166,23 +166,23 @@ export async function getPumpDataWithRetry(mint: PublicKey, retries = 3, delay =
       // Increase delay for next attempt
       delay = delay * 1.5;
     }
-    
+
     const result = await getPumpData(mint, true);
     if (result !== null) {
       return result;
     }
-    
+
     attempt++;
   }
-  
+
   if (logging) logger.warn(`[❌ FAILED] ${mint.toString().slice(0, 8)}... | Failed to get pump data after ${retries} retries`);
   return null;
 }
 
-export async function getPumpTokenPriceUSD(mint: string): Promise<{
+export async function getPumpTokenPriceInSOL(mint: string): Promise<{
   price: number;
   pumpData?: PumpData;
-  isRaydium?: boolean;
+  isPumpswap?: boolean;
 }> {
   try {
     const pumpData = await getPumpData(new PublicKey(mint));
@@ -190,54 +190,21 @@ export async function getPumpTokenPriceUSD(mint: string): Promise<{
       return {
         price: pumpData.price,
         pumpData,
-        isRaydium: false
+        isPumpswap: false
       };
     }
-    let poolKeys = getPoolKeyMap(mint);
-    if (!poolKeys) {
-      const poolId = await fetchPoolInfoByMint(mint);
-      if (!poolId) {
-        return {
-          price: tokenPriceMap.get(mint) || 0,
-          isRaydium: true
-        };
-      }
-      const targetPoolInfo = await formatAmmKeysById(poolId);
-      if (!targetPoolInfo) {
-        return {
-          price: tokenPriceMap.get(mint) || 0,
-          isRaydium: true
-        };
-      }
-      poolKeys = jsonInfo2PoolKeys(targetPoolInfo) as LiquidityPoolKeys;
-      setPoolKeyMap(mint, poolKeys);
-    }
-    const slippageP = new Percent(1, 100);
-    const MINT_TOKEN = new Token(TOKEN_PROGRAM_ID, mint, TOKEN_DECIMALS);
-    const inputTokenAmount = new TokenAmount(WSOL_TOKEN, 100);
-    const poolInfo = await calculateReserves(poolKeys)
-    const { currentPrice } = Liquidity.computeAmountOut({
-      poolKeys,
-      poolInfo,
-      amountIn: inputTokenAmount,
-      currencyOut: MINT_TOKEN,
-      slippage: slippageP,
-    });
-    let price = 0;
-    const decimalsDiff = currentPrice.baseCurrency.decimals - currentPrice.quoteCurrency.decimals;
-    if ((currentPrice.baseCurrency as Token).mint.equals(spl.NATIVE_MINT)) {
-      price = currentPrice.denominator.mul(new BN(LAMPORTS_PER_SOL)).div(currentPrice.numerator).toNumber() / 10 ** decimalsDiff / LAMPORTS_PER_SOL;
-    } else {
-      price = currentPrice.numerator.mul(new BN(LAMPORTS_PER_SOL)).div(currentPrice.denominator).toNumber() * 10 ** decimalsDiff / LAMPORTS_PER_SOL;      
-    }
-    tokenPriceMap.set(mint, price);
-    // console.log("raydium price", price);
-    return { price, isRaydium: true };
+    const response = await (
+      await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${mint}&outputMint=So11111111111111111111111111111111111111112&amount=1000000`
+      )
+    ).json();
+    console.log('getPumpTokenPriceInSOL, getPrice by Jupiter: result: ', response);
+    const price = Number(response.outAmount / LAMPORTS_PER_SOL);
+    return { price, isPumpswap: true };
   } catch (error) {
-    logger.error("getPumpTokenPriceUSD error" + error);
+    logger.error("getPumpTokenPriceInSOL error" + error);
     return {
       price: tokenPriceMap.get(mint) || 0,
-      isRaydium: true
+      isPumpswap: true
     };
   }
 }

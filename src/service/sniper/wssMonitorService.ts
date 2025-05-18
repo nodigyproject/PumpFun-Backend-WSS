@@ -3,7 +3,7 @@ import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { connection, wallet, START_TXT } from "../../config";
 import logger from "../../logs/logger";
 import { getTokenDataforAssets, getWalletTokens } from "../assets/assets";
-import { getTokenBalance, getPumpData, getPumpTokenPriceUSD } from "../pumpfun/pumpfun";
+import { getTokenBalance, getPumpData, getPumpTokenPriceInSOL } from "../pumpfun/pumpfun";
 import { SniperBotConfig } from "../setting/botConfigClass";
 import { sellTokenSwap } from "../../utils/utils";
 import { fetchPoolInfoByMint } from "../swap/raydium/utils";
@@ -142,7 +142,7 @@ export class WssMonitorService {
             if (this.isTransactionInProgress(token.mint)) continue;
             
             const tokenData = await getTokenDataforAssets(token.mint);
-            const { price: currentPrice_usd } = await getPumpTokenPriceUSD(token.mint);
+            const { price: currentPrice_usd } = await getPumpTokenPriceInSOL(token.mint);
             
             if (tokenData && currentPrice_usd > 0) {
               await this.evaluateSellConditions(token.mint, tokenData, currentPrice_usd);
@@ -364,7 +364,7 @@ export class WssMonitorService {
       
       // Initialize price monitoring
       try {
-        const { price: initialPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+        const { price: initialPrice_usd } = await getPumpTokenPriceInSOL(mintAddress);
         
         const botSellConfig = SniperBotConfig.getSellConfig();
         const durationSec = typeof botSellConfig.mcChange?.duration === 'number' ? 
@@ -451,7 +451,7 @@ export class WssMonitorService {
       
       // Initialize price monitoring
       try {
-        const { price: initialPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+        const { price: initialPrice_usd } = await getPumpTokenPriceInSOL(mintAddress);
         
         const botSellConfig = SniperBotConfig.getSellConfig();
         const durationSec = typeof botSellConfig.mcChange?.duration === 'number' ? 
@@ -581,7 +581,7 @@ export class WssMonitorService {
     // Set up new interval (log every 60 seconds)
     const interval = setInterval(async () => {
       try {
-        const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+        const { price: currentPrice_usd } = await getPumpTokenPriceInSOL(mintAddress);
         const ageFormatted = formatTimeElapsed(Date.now() - (buyTime || Date.now()));
         const priceChangePercent = ((currentPrice_usd / buyPrice) - 1) * 100;
         const mcUsd = currentPrice_usd * TOTAL_SUPPLY;
@@ -800,7 +800,7 @@ private static async handlePoolAccountChange(
       
       // Get current token data and price
       const tokenData = await getTokenDataforAssets(mintAddress);
-      const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+      const { price: currentPrice_usd } = await getPumpTokenPriceInSOL(mintAddress);
       
       if (!currentPrice_usd || currentPrice_usd === 0) {
         logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);
@@ -879,7 +879,7 @@ private static async handlePoolAccountChange(
         
         // Get current token data and price
         const tokenData = await getTokenDataforAssets(mintAddress);
-        const { price: currentPrice_usd } = await getPumpTokenPriceUSD(mintAddress);
+        const { price: currentPrice_usd } = await getPumpTokenPriceInSOL(mintAddress);
         
         if (!currentPrice_usd || currentPrice_usd === 0) {
           logger.warn(`[⚠️ PRICE-WARNING] ${shortMint} | Could not get valid price, skipping evaluation`);

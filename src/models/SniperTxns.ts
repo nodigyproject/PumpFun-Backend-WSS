@@ -17,7 +17,7 @@ export interface ITransaction extends Document {
   swapProfitPercent_usd?: number;
   buyMC_usd?: number;
   date: number;
-  dex: "Raydium" | "Pumpfun";
+  dex: "Pumpfun Amm" | "Pumpfun";
   sellReason: string
 }
 
