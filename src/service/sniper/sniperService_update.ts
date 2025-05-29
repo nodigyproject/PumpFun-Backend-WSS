@@ -119,7 +119,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
       // 1. check bot running status
       if (!isRunning()) {
-        // console.log('Bot is not running.');
+        console.log('Bot is not running.');
         return;
       }
 
