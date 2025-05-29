@@ -304,6 +304,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           let bondingCurveStatus: any;
 
           while (retry > 0) {
+            console.log(`[${bondingCurve}], getBondingCureStatus: retry: ${retry}`);
             const bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
             if (bondingCurveStatus) {
               break;
@@ -975,7 +976,7 @@ export const getBondingCurveStatus = async (connection: Connection, bondingCurve
     return { completed, realSolReserves, realTokenReserves, virtualSolReserves, virtualTokenReserves };
 
   } catch (error) {
-    console.log(`getBondingCurveStatus Error: ${error}`);
+    // console.log(`getBondingCurveStatus Error: ${error}`);
     return null;
   }
 }
