@@ -176,6 +176,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
       console.log('associatedBondingCurve: ', associatedBondingCurve);
       const creatorVault = accountKeys[7];
       console.log('createValult: ', creatorVault);
+      const dev = accountKeys[0];
+      console.log('Dev wallet : ', dev);
 
       const devBuySol = (result.meta.preBalances[0] - result.meta.postBalances[0]) / LAMPORTS_PER_SOL;
       console.log('dev buy sol = ', devBuySol);
