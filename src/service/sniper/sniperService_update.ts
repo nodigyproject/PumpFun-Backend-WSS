@@ -13,7 +13,7 @@ import Client, {
   SubscribeRequestFilterTransactions,
 } from "@triton-one/yellowstone-grpc";
 import { SubscribeRequestPing } from "@triton-one/yellowstone-grpc/dist/grpc/geyser";
-import { LAMPORTS_PER_SOL, PublicKey, Keypair, Transaction, TransactionMessage, VersionedTransaction, BlockhashWithExpiryBlockHeight, SystemProgram, Connection } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey, Keypair, Transaction, TransactionMessage, VersionedTransaction, BlockhashWithExpiryBlockHeight, SystemProgram, Connection, TransactionInstruction } from "@solana/web3.js";
 import { publicKey } from "@solana/buffer-layout-utils";
 import dotenv from "dotenv";
 import { getDexscreenerData, isRunning, isWorkingTime } from "../../utils/utils";
@@ -23,7 +23,7 @@ import { DBTokenList, IToken } from "../../models/TokenList";
 import { SniperBotConfig } from "../setting/botConfigClass";
 import { getWalletBalanceFromCache } from "./getWalletBalance";
 import { IAlertMsg, ITxntmpData } from "../../utils/types";
-import { PUMPFUN_IMG } from "../../utils/constants";
+import { EVENT_AUTHORITY, PUMP_FUN_PROGRAM, PUMPFUN_IMG } from "../../utils/constants";
 import { createAlert } from "../alarm/alarm";
 import { PumpFun, IDL } from "./IDL";
 import { Program, Provider, AnchorProvider } from "@coral-xyz/anchor";
@@ -31,6 +31,7 @@ import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import { struct, bool, u64, Layout } from "@coral-xyz/borsh";
 import * as spl from "@solana/spl-token";
 import { SniperTxns } from "../../models/SniperTxns";
+import { SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@raydium-io/raydium-sdk";
 // import { getLatestBlockhash } from "./getBlock";
 
 dotenv.config();
@@ -124,7 +125,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
       // 2. check bot working time
       if (!isWorkingTime()) {
-        console.log('Bot is not in working time.');
+        // console.log('Bot is not in working time.');
         return;
       }
 
@@ -161,19 +162,20 @@ async function handleStream(client: Client, args: SubscribeRequest) {
       }
 
       const result = tOutPut(data);
-      console.log('resut: ', result);
+      const accountKeys = result.message.accountKeys;
+
       const mint = result.meta.postTokenBalances[0].mint;
-      console.log(`New Token : `, mint);
-      const signature = result.signature;
-      console.log('signature = ', signature);
-      const dev = result.message.accountKeys[0];
-      console.log('Dev wallet : ', dev);
-      const bondingCurve = result.message.accountKeys[2];
-      console.log('bondingCurve = ', bondingCurve);
-      const associatedBondingCurve = result.message.accountKeys[3];
-      console.log('associatedBondingCurve = ', associatedBondingCurve);
-
-
+      console.log('mint: ', mint);
+      const global = accountKeys[11];
+      console.log('global: ', global);
+      const feeRecipient = accountKeys[6];
+      console.log('feeRecipient: ', feeRecipient);
+      const bondingCurve = accountKeys[2];
+      console.log('bondingCurve: ', bondingCurve);
+      const associatedBondingCurve = accountKeys[3];
+      console.log('associatedBondingCurve: ', associatedBondingCurve);
+      const creatorVault = accountKeys[7];
+      console.log('createValult: ', creatorVault);
 
       const devBuySol = (result.meta.preBalances[0] - result.meta.postBalances[0]) / LAMPORTS_PER_SOL;
       console.log('dev buy sol = ', devBuySol);
@@ -312,11 +314,11 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           // buy
           const jito_tip = botBuyConfig.jitoTipAmount;
-          // console.log('jitoTipAmount = ', jito_tip);
+          console.log('jitoTipAmount = ', jito_tip);
           const slippage = botBuyConfig.slippage;
-          // console.log('slippage = ', slippage);
+          console.log('slippage = ', slippage);
           const buySolAmount = botBuyConfig.investmentPerToken;
-          // console.log('buyAmount = ', buySolAmount);
+          console.log('buyAmount = ', buySolAmount);
 
           // Calcuate buy token amount
           let n = bondingCurveStatus.virtualSolReserves * bondingCurveStatus.virtualTokenReserves;
@@ -324,10 +326,10 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           let r = n / i + 1n;
           let s = bondingCurveStatus.virtualTokenReserves - r;
           const buyTokenAmount = s < bondingCurveStatus.realTokenReserves ? s : bondingCurveStatus.realTokenReserves;
-          // console.log('buyTokenAmount = ', buyTokenAmount);
+          console.log('buyTokenAmount = ', buyTokenAmount);
 
           const buySolAmountWithSlippage = BigInt(buySolAmount * LAMPORTS_PER_SOL) * (100n + BigInt(slippage)) / 100n;
-          // console.log('buySolAmountWithSlippage = ', buySolAmountWithSlippage);
+          console.log('buySolAmountWithSlippage = ', buySolAmountWithSlippage);
 
           // make transaction and send 
           const associatedUser = await spl.getAssociatedTokenAddress(new PublicKey(mint), wallet.publicKey, false);
@@ -343,18 +345,28 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             )
           );
 
-          transaction.add(
-            await pumpfun_program.methods
-              .buy(new BN(buyTokenAmount.toString()), new BN(buySolAmountWithSlippage.toString()))
-              .accounts({
-                feeRecipient: new PublicKey("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM"),
-                mint: new PublicKey(mint),
-                associatedBondingCurve: associatedBondingCurve,
-                associatedUser: associatedUser,
-                user: wallet.publicKey,
-              })
-              .transaction()
-          );
+          const keys = [
+            { pubkey: global, isSigner: false, isWritable: false },
+            { pubkey: feeRecipient, isSigner: false, isWritable: true },
+            { pubkey: mint, isSigner: false, isWritable: false },
+            { pubkey: bondingCurve, isSigner: false, isWritable: true },
+            { pubkey: associatedBondingCurve, isSigner: false, isWritable: true },
+            { pubkey: associatedUser, isSigner: false, isWritable: true },
+            { pubkey: wallet.publicKey, isSigner: false, isWritable: true },
+            { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: creatorVault, isSigner: false, isWritable: true },
+            { pubkey: EVENT_AUTHORITY, isSigner: false, isWritable: false },
+            { pubkey: PUMP_FUN_PROGRAM, isSigner: false, isWritable: false }
+          ];
+
+          const data = Buffer.concat([bufferFromUInt64('16927863322537952870'), bufferFromUInt64(Number(buyTokenAmount)), bufferFromUInt64(Number(buySolAmountWithSlippage))]);
+          const instruction = new TransactionInstruction({
+            keys: keys,
+            programId: PUMP_FUN_PROGRAM,
+            data: data
+          });
+          transaction.add(instruction);
 
           const blockHash = await connection.getLatestBlockhash();
           // const blockHash = getLatestBlockhash();
@@ -367,8 +379,6 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           const versionedTx = new VersionedTransaction(messageV0);
           versionedTx.sign([wallet]);
-
-          // const result = await sendBundle(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
 
           const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
 
@@ -1198,4 +1208,10 @@ export const jupiterSwap = async (inputMint: string, outMint: string, inputAmoun
   } else {
     return null;
   }
+}
+
+export function bufferFromUInt64(value: number | string) {
+  let buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64LE(BigInt(value));
+  return buffer;
 }
