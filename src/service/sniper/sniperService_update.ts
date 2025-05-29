@@ -300,9 +300,18 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           }
 
           // 2. check market cap
-          const bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
-          if (!bondingCurveStatus) {
-            console.log(`[${mint}] getBondingCurveStatus Failed. Skip!`);
+          let retry = 3;
+          let bondingCurveStatus: any;
+          
+          while (retry > 0) {
+            const bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
+            if (bondingCurveStatus) {
+              break;
+            }
+          }
+
+          if (bondingCurveStatus == null) {
+            console.log(`[${mint}], getBondingCurveStatus failed.`)
             return;
           }
 
@@ -938,12 +947,10 @@ async function subscribeCommand(client: Client, args: SubscribeRequest) {
   }
 }
 
-const getBondingCurveStatus = async (connection: Connection, bondingCurve: PublicKey) => {
+export const getBondingCurveStatus = async (connection: Connection, bondingCurve: PublicKey) => {
   try {
     const tokenAccount = await connection.getAccountInfo(
-      bondingCurve,
-      "processed"
-    );
+      bondingCurve);
 
     const structure = struct([
       u64("discriminator"),
