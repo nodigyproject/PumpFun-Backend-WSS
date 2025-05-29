@@ -302,7 +302,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           // 2. check market cap
           let retry = 3;
           let bondingCurveStatus: any;
-          
+
           while (retry > 0) {
             const bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
             if (bondingCurveStatus) {
@@ -334,7 +334,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           // Calcuate buy token amount
           let n = bondingCurveStatus.virtualSolReserves * bondingCurveStatus.virtualTokenReserves;
           let i = bondingCurveStatus.virtualSolReserves + BigInt(buySolAmount * LAMPORTS_PER_SOL);
-          let r = n / i + 1n;
+          let r = n / i + 1;
           let s = bondingCurveStatus.virtualTokenReserves - r;
           const buyTokenAmount = s < bondingCurveStatus.realTokenReserves ? s : bondingCurveStatus.realTokenReserves;
           console.log('buyTokenAmount = ', buyTokenAmount);
