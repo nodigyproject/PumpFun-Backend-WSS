@@ -308,6 +308,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             if (bondingCurveStatus) {
               break;
             }
+            await sleep(200);
+            retry--;
           }
 
           if (bondingCurveStatus == null) {
