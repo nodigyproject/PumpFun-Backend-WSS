@@ -305,7 +305,8 @@ async function handleStream(client: Client, args: SubscribeRequest) {
 
           while (retry > 0) {
             console.log(`[${bondingCurve}], getBondingCureStatus: retry: ${retry}`);
-            const bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
+            bondingCurveStatus = await getBondingCurveStatus(connection, new PublicKey(bondingCurve));
+            console.log(`[${bondingCurve}], bondingCurveStatus: `, bondingCurveStatus);
             if (bondingCurveStatus) {
               break;
             }
@@ -314,7 +315,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           }
 
           if (bondingCurveStatus == null) {
-            console.log(`[${mint}], getBondingCurveStatus failed.`)
+            console.log(`[${bondingCurve}], getBondingCurveStatus failed.`)
             return;
           }
 
