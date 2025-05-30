@@ -338,7 +338,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           // Calcuate buy token amount
           let n = bondingCurveStatus.virtualSolReserves * bondingCurveStatus.virtualTokenReserves;
           let i = bondingCurveStatus.virtualSolReserves + BigInt(buySolAmount * LAMPORTS_PER_SOL);
-          let r = n / i + 1;
+          let r = n / i;
           let s = bondingCurveStatus.virtualTokenReserves - r;
           const buyTokenAmount = s < bondingCurveStatus.realTokenReserves ? s : bondingCurveStatus.realTokenReserves;
           console.log('buyTokenAmount = ', buyTokenAmount);
