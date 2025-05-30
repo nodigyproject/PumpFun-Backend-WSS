@@ -361,16 +361,16 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           );
 
           const keys = [
-            { pubkey: global, isSigner: false, isWritable: false },
-            { pubkey: feeRecipient, isSigner: false, isWritable: true },
-            { pubkey: mint, isSigner: false, isWritable: false },
-            { pubkey: bondingCurve, isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(global), isSigner: false, isWritable: false },
+            { pubkey: new PublicKey(feeRecipient), isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(mint), isSigner: false, isWritable: false },
+            { pubkey: new PublicKey(bondingCurve), isSigner: false, isWritable: true },
             { pubkey: associatedBondingCurve, isSigner: false, isWritable: true },
             { pubkey: associatedUser, isSigner: false, isWritable: true },
             { pubkey: wallet.publicKey, isSigner: false, isWritable: true },
             { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
             { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-            { pubkey: creatorVault, isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(creatorVault), isSigner: false, isWritable: true },
             { pubkey: EVENT_AUTHORITY, isSigner: false, isWritable: false },
             { pubkey: PUMP_FUN_PROGRAM, isSigner: false, isWritable: false }
           ];
