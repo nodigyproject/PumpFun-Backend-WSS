@@ -395,6 +395,13 @@ async function handleStream(client: Client, args: SubscribeRequest) {
           const versionedTx = new VersionedTransaction(messageV0);
           versionedTx.sign([wallet]);
 
+          const simulation = await connection.simulateTransaction(versionedTx);
+
+          if (simulation.value.err) {
+            console.log(`[${mint}] buy simulation error, result: `, simulation);
+            return;
+          }
+
           const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
 
           if (confirmed) {
