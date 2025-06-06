@@ -365,7 +365,7 @@ async function handleStream(client: Client, args: SubscribeRequest) {
             { pubkey: new PublicKey(feeRecipient), isSigner: false, isWritable: true },
             { pubkey: new PublicKey(mint), isSigner: false, isWritable: false },
             { pubkey: new PublicKey(bondingCurve), isSigner: false, isWritable: true },
-            { pubkey: associatedBondingCurve, isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(associatedBondingCurve), isSigner: false, isWritable: true },
             { pubkey: associatedUser, isSigner: false, isWritable: true },
             { pubkey: wallet.publicKey, isSigner: false, isWritable: true },
             { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
