@@ -44,7 +44,7 @@ const provider = new AnchorProvider(connection, new NodeWallet(new Keypair()), {
 export const pumpfun_program = new Program<PumpFun>(IDL as PumpFun, provider);
 
 let lastProcessTime = 0;
-const MIN_TOKEN_PROCESS_INTERVAL = 1000;
+const MIN_TOKEN_PROCESS_INTERVAL = 5000;
 
 interface SubscribeRequest {
   accounts: { [key: string]: SubscribeRequestFilterAccounts };
