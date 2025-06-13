@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import { WSS_URL } from "../../config";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 export const sniperService = () => {
 
@@ -47,13 +48,25 @@ export const sniperService = () => {
                     return;
                 }
 
-                console.log('-------------> transaction: ', messageObj.params.result.transaction);
+                // console.log('-------------> transaction: ', messageObj.params.result.transaction);
 
                 const signature = messageObj.params.result.signature;
 
                 console.log(`-------------> new detect, signature: ${signature}`);
 
                 const instructions = messageObj.params.result.transaction.transaction.message.instructions;
+
+                console.log(`-------------> instructions: `, instructions);
+
+                const accountKeys = messageObj.params.result.transaction.transaction.message.accountKeys;
+
+                console.log(`-------------> accountKeys: `, accountKeys);
+
+                const devBuySol = (messageObj.params.result.transaction.meta.preBalances[0] - messageObj.params.result.transaction.meta.postBalances[0]) / LAMPORTS_PER_SOL;
+                
+                console.log('-------------> Dev Buy Sol Amount= ', devBuySol);
+
+
                 // const addLiquidityInstruction = instructions.filter((instruction: any) => {
                 //     if (instruction.programId == RAYDIUM_CPMM_PROGRAM_ID)
                 //         return true;
