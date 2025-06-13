@@ -7,6 +7,8 @@ export let WS = new WebSocket(WSS_URL);
 
 export const sniperService = (ws: WebSocket) => {
 
+    console.log('----------------> sniperService --------------->');
+
     ws.on('open', async function open() {
         console.log('----------------------> WebSocket is open');
         
