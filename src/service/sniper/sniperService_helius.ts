@@ -1,17 +1,15 @@
 import WebSocket from "ws";
 import { WSS_URL } from "../../config";
 
-console.log(`-------------------> WSS_URL: `, WSS_URL);
-
-export let WS = new WebSocket(WSS_URL);
-
-export const sniperService = (ws: WebSocket) => {
+export const sniperService = () => {
 
     console.log('----------------> sniperService --------------->');
 
+    const ws = new WebSocket(WSS_URL);
+
     ws.on('open', async function open() {
         console.log('----------------------> WebSocket is open');
-        
+
         const request = {
             jsonrpc: "2.0",
             id: 'pumpfun_detect',
@@ -29,7 +27,7 @@ export const sniperService = (ws: WebSocket) => {
                 }
             ]
         };
-        
+
         ws.send(JSON.stringify(request));
         startPing(ws);
 
@@ -45,8 +43,7 @@ export const sniperService = (ws: WebSocket) => {
 
                 if (messageObj.params.error) {
                     console.error('---------------> WebSocket transactionSubscribe error. so recreate websocket');
-                    WS = new WebSocket(WSS_URL);
-                    sniperService(WS);
+                    sniperService();
                     return;
                 }
 
@@ -66,7 +63,7 @@ export const sniperService = (ws: WebSocket) => {
                 // const poolAccountKeys = addLiquidityInstruction.accounts;
             }
         } catch (e) {
-            console.error('WebSocket message handle error :', e);
+            console.error('------------------> WebSocket message handle error :', e);
         }
     });
 
@@ -75,9 +72,8 @@ export const sniperService = (ws: WebSocket) => {
     });
 
     ws.on('close', function close() {
-        console.log('WebSocket is closed');
-        WS = new WebSocket(WSS_URL);
-        sniperService(WS);
+        console.log('-------------------> WebSocket is closed');
+        sniperService();
     });
 
 }

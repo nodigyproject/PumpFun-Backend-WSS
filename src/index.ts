@@ -5,7 +5,7 @@ import { validateJWT } from "./middleware/auth";
 import routes from "./routes";
 import logger from "./logs/logger";
 import { config, START_TXT, wallet } from "./config";
-import { sniperService, WS } from "./service/sniper/sniperService_helius";
+import { sniperService } from "./service/sniper/sniperService_helius";
 import { sellMonitorService } from "./service/sniper/sellMonitorService";
 import { createServer } from "http";
 import { startBalanceMonitor } from "./service/sniper/getWalletBalance";
@@ -46,7 +46,7 @@ const startServer = async () => {
     startBalanceMonitor();
 
     // Always start the sniper service (for buying tokens)
-    sniperService(WS);
+    sniperService();
 
     // Choose the appropriate sell monitoring service based on configuration
     // if (USE_WSS) {
