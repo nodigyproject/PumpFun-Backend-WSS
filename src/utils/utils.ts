@@ -25,7 +25,7 @@ import { ITransaction, SniperTxns } from "../models/SniperTxns";
 import { swap } from "../service/swap/swap";
 // import { getLatestBlockhash } from "../service/sniper/getBlock";
 import { getTokenDataforAssets } from "../service/assets/assets";
-import { jito_executeAndConfirm, jupiterSwap, pumpfun_program, sell } from "../service/sniper/sniperService_update";
+import { jito_executeAndConfirm, jupiterSwap, pumpfun_program, sell } from "../service/sniper/sniperService_grpc";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 const WSOL = "So11111111111111111111111111111111111111112";
