@@ -1,6 +1,8 @@
 import WebSocket from "ws";
 import { WSS_URL } from "../../config";
 
+console.log(`-------------------> WSS_URL: `, WSS_URL);
+
 export let WS = new WebSocket(WSS_URL);
 
 export const sniperService = (ws: WebSocket) => {
@@ -34,7 +36,9 @@ export const sniperService = (ws: WebSocket) => {
     ws.on('message', async function incoming(data) {
         const messageStr = data.toString('utf8');
         try {
+
             const messageObj = JSON.parse(messageStr);
+
             if (messageObj.method == "transactionNotification") {
 
                 if (messageObj.params.error) {
