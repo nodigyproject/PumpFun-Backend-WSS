@@ -47,7 +47,7 @@ export const sniperService = () => {
                     return;
                 }
 
-                console.log('-------------> messageObj: ', messageObj);
+                console.log('-------------> transaction: ', messageObj.params.result.transaction);
 
                 const signature = messageObj.params.result.signature;
 
