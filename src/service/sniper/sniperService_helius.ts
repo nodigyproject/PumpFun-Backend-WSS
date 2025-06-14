@@ -58,6 +58,13 @@ export const sniperService = () => {
 
                 console.log(`-------------> instructions: `, instructions);
 
+                const pumpfunInstructions = instructions.filter((instruction: any) => {
+                    if (instruction.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P')
+                        return true;
+                    else
+                        return false;
+                })
+
                 // const accountKeys = messageObj.params.result.transaction.transaction.message.accountKeys;
 
                 // console.log(`-------------> accountKeys: `, accountKeys);
@@ -66,40 +73,44 @@ export const sniperService = () => {
 
                 console.log('-------------> Dev Buy Sol Amount= ', devBuySol);
 
-                const buyInstruction = instructions[instructions.length - 1];
+                const createPoolInstruction = pumpfunInstructions[0];
+
+                console.log('-------------> Create Pool Instructions = ', createPoolInstruction);
+
+                const buyInstruction = pumpfunInstructions[instructions.length - 1];
 
                 console.log('-------------> Buy Instructions = ', buyInstruction);
 
                 const poolAccountKeys = buyInstruction.accounts;
 
                 console.log('-------------> poolAccountKeys = ', poolAccountKeys);
-                
+
                 const global = poolAccountKeys[0];
 
                 console.log('-------------> global: ', global);
-                
+
                 const feeRecipient = poolAccountKeys[1];
-                
+
                 console.log('-------------> feeRecipient: ', feeRecipient);
 
                 const mint = poolAccountKeys[2];
-                
+
                 console.log('-------------> mint: ', mint);
-                
+
                 const bondingCurve = poolAccountKeys[3];
-                
+
                 console.log('-------------> bondingCurve: ', bondingCurve);
-                
+
                 const associatedBondingCurve = poolAccountKeys[4];
-                
+
                 console.log('-------------> associatedBondingCurve: ', associatedBondingCurve);
-                
+
                 const creatorVault = poolAccountKeys[9];
-                
+
                 console.log('-------------> createValult: ', creatorVault);
-                
+
                 const event = poolAccountKeys[10];
-                
+
                 console.log('-------------> Event: ', event);
 
             }
