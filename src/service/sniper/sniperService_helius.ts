@@ -147,12 +147,57 @@ const getMetaData = (data: any) => {
     let tokenImage = '';
 
     const bytedata = bs58.decode(data);
-    const length = bytedata.slice(8, 12);
-    console.log('tokenName length: ', length);
-    // for (let i = 12; i < length; i ++) {
+    let byteArray = bytedata.slice(8, 12);
+    let tokenNameLength = 0;
 
-    // }
+    for (let i = 0; i < byteArray.length; i++) {
+        tokenNameLength += byteArray[i] * 256
+    }
 
+    console.log('tokenName length: ', tokenNameLength);
+
+    byteArray = bytedata.slice(12, 12 + tokenNameLength);
+
+    for (let i = 0; i < byteArray.length; i++) {
+        tokenName += String.fromCharCode(byteArray[i]);
+    }
+
+    console.log('tokenName: ', tokenName);
+
+    ///////////////
+
+    let tokenSymbolLength = 0;
+
+    byteArray = bytedata.slice(12 + tokenNameLength, 16 + tokenNameLength);
+
+    for (let i = 0; i < byteArray.length; i++) {
+        tokenNameLength += byteArray[i] * 256
+    }
+    console.log('tokenSymbol length: ', tokenNameLength);
+
+    byteArray = bytedata.slice(16 + tokenNameLength, 16 + tokenNameLength + tokenSymbolLength);
+
+    for (let i = 0; i < byteArray.length; i++) {
+        tokenSymbol += String.fromCharCode(byteArray[i]);
+    }
+    console.log('tokenSymbol: ', tokenSymbol);
+
+    ///////////////
+    let tokenImageLength = 0;
+
+    byteArray = bytedata.slice(16 + tokenNameLength + tokenSymbolLength, 20 + tokenNameLength + tokenSymbolLength);
+
+    for (let i = 0; i < byteArray.length; i++) {
+        tokenNameLength += byteArray[i] * 256
+    }
+    console.log('tokenImage length: ', tokenImageLength);
+
+    byteArray = bytedata.slice(20 + tokenNameLength + tokenSymbolLength, 20 + tokenNameLength + tokenSymbolLength + tokenImageLength);
+
+    for (let i = 0; i < byteArray.length; i++) {
+        tokenImage += String.fromCharCode(byteArray[i]);
+    }
+    console.log('tokenImage: ', tokenImage);
 
     return {
         tokenName,
