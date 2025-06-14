@@ -73,6 +73,34 @@ export const sniperService = () => {
                 const poolAccountKeys = buyInstruction.accounts;
 
                 console.log('-------------> poolAccountKeys = ', poolAccountKeys);
+                
+                const global = poolAccountKeys[0];
+
+                console.log('-------------> global: ', global);
+                
+                const feeRecipient = poolAccountKeys[1];
+                
+                console.log('-------------> feeRecipient: ', feeRecipient);
+
+                const mint = poolAccountKeys[2];
+                
+                console.log('-------------> mint: ', mint);
+                
+                const bondingCurve = poolAccountKeys[3];
+                
+                console.log('-------------> bondingCurve: ', bondingCurve);
+                
+                const associatedBondingCurve = poolAccountKeys[4];
+                
+                console.log('-------------> associatedBondingCurve: ', associatedBondingCurve);
+                
+                const creatorVault = poolAccountKeys[9];
+                
+                console.log('-------------> createValult: ', creatorVault);
+                
+                const event = poolAccountKeys[10];
+                
+                console.log('-------------> Event: ', event);
 
             }
         } catch (e) {
