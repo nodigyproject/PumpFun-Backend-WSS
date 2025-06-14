@@ -56,7 +56,7 @@ export const sniperService = () => {
 
                 const instructions = messageObj.params.result.transaction.transaction.message.instructions;
 
-                console.log(`-------------> instructions: `, instructions);
+                // console.log(`-------------> instructions: `, instructions);
 
                 const pumpfunInstructions = instructions.filter((instruction: any) => {
                     if (instruction.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P')
