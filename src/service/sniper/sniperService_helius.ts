@@ -201,9 +201,14 @@ const getMetaData = async (data: any) => {
     }
     console.log('metaDataLink: ', metaDataLink);
 
-    const response = await axios.get(metaDataLink);
+    const response = await axios.get("https://ipfs.io/ipfs/QmRF9SoNRyPUMtEy2e2z1Eu9VFVtyHbnXH4qkiPAqxtwzF", {
+        headers: {
+            "User-Agent": "curl/7.68.0",
+            Accept: "*/*",
+        }
+    });
 
-    tokenImage = response.data;
+    tokenImage = response.data.image;
 
     console.log('tokenImage: ', tokenImage);
 
