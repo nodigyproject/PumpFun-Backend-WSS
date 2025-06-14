@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import { WSS_URL } from "../../config";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+import axios from "axios";
 
 export const sniperService = () => {
 
@@ -141,10 +142,11 @@ function startPing(ws: WebSocket) {
     }, 30000);
 }
 
-const getMetaData = (data: any) => {
+const getMetaData = async (data: any) => {
     let tokenName = '';
     let tokenSymbol = '';
     let tokenImage = '';
+    let metaDataLink = '';
 
     const bytedata = bs58.decode(data);
     let byteArray = bytedata.slice(8, 12);
@@ -183,20 +185,26 @@ const getMetaData = (data: any) => {
     console.log('tokenSymbol: ', tokenSymbol);
 
     ///////////////
-    let tokenImageLength = 0;
+    let metaDataLinkLength = 0;
 
     byteArray = bytedata.slice(16 + tokenNameLength + tokenSymbolLength, 20 + tokenNameLength + tokenSymbolLength);
 
     for (let i = 0; i < byteArray.length; i++) {
-        tokenImageLength += byteArray[i] * (256 ** i)
+        metaDataLinkLength += byteArray[i] * (256 ** i)
     }
-    console.log('tokenImage length: ', tokenImageLength);
+    console.log('metaDataLink length: ', metaDataLinkLength);
 
-    byteArray = bytedata.slice(20 + tokenNameLength + tokenSymbolLength, 20 + tokenNameLength + tokenSymbolLength + tokenImageLength);
+    byteArray = bytedata.slice(20 + tokenNameLength + tokenSymbolLength, 20 + tokenNameLength + tokenSymbolLength + metaDataLinkLength);
 
     for (let i = 0; i < byteArray.length; i++) {
-        tokenImage += String.fromCharCode(byteArray[i]);
+        metaDataLink += String.fromCharCode(byteArray[i]);
     }
+    console.log('metaDataLink: ', metaDataLink);
+
+    const response = await axios.get(metaDataLink);
+
+    tokenImage = response.data;
+
     console.log('tokenImage: ', tokenImage);
 
     return {
