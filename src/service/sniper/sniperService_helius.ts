@@ -66,7 +66,7 @@ export const sniperService = () => {
 
                 console.log('-------------> Dev Buy Sol Amount= ', devBuySol);
 
-                const buyInstruction = instructions[instructions.length];
+                const buyInstruction = instructions[instructions.length - 1];
 
                 console.log('-------------> Buy Instructions = ', buyInstruction);
 
