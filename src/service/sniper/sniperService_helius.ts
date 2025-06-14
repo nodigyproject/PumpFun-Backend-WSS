@@ -397,6 +397,8 @@ export const sniperService = () => {
 
                         const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
 
+                        console.log('buy success');
+
                         if (confirmed) {
                             const txSignature = base58.encode(versionedTx.signatures[0]);
                             const investSolAmount = await getSwapSolAmount(connection, txSignature);
