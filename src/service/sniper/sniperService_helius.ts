@@ -77,7 +77,7 @@ export const sniperService = () => {
 
                 console.log('-------------> Create Pool Instructions = ', createPoolInstruction);
 
-                const buyInstruction = pumpfunInstructions[instructions.length - 1];
+                const buyInstruction = pumpfunInstructions[pumpfunInstructions.length - 1];
 
                 console.log('-------------> Buy Instructions = ', buyInstruction);
 
