@@ -58,22 +58,22 @@ export const sniperService = () => {
 
                 console.log(`-------------> instructions: `, instructions);
 
-                const accountKeys = messageObj.params.result.transaction.transaction.message.accountKeys;
+                // const accountKeys = messageObj.params.result.transaction.transaction.message.accountKeys;
 
-                console.log(`-------------> accountKeys: `, accountKeys);
+                // console.log(`-------------> accountKeys: `, accountKeys);
 
                 const devBuySol = (messageObj.params.result.transaction.meta.preBalances[0] - messageObj.params.result.transaction.meta.postBalances[0]) / LAMPORTS_PER_SOL;
-                
+
                 console.log('-------------> Dev Buy Sol Amount= ', devBuySol);
 
+                const buyInstruction = instructions[instructions.length];
 
-                // const addLiquidityInstruction = instructions.filter((instruction: any) => {
-                //     if (instruction.programId == RAYDIUM_CPMM_PROGRAM_ID)
-                //         return true;
-                //     else
-                //         return false;
-                // })[0];
-                // const poolAccountKeys = addLiquidityInstruction.accounts;
+                console.log('-------------> Buy Instructions = ', buyInstruction);
+
+                const poolAccountKeys = buyInstruction.accounts;
+
+                console.log('-------------> poolAccountKeys = ', poolAccountKeys);
+
             }
         } catch (e) {
             console.error('------------------> WebSocket message handle error :', e);
