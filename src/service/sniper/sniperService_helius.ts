@@ -62,8 +62,6 @@ export const sniperService = () => {
         }
         lastProcessTime = now;
 
-        console.log('new Message: ', messageStr);
-        
         /////////////// check if bot running is enabled
         if (!isRunning()) {
             // console.log('Bot is not running.');
@@ -519,8 +517,8 @@ export const sniperService = () => {
                                                 { pubkey: associatedUser, isSigner: false, isWritable: true },
                                                 { pubkey: wallet.publicKey, isSigner: false, isWritable: true },
                                                 { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
-                                                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                                                 { pubkey: new PublicKey(creatorVault), isSigner: false, isWritable: true },
+                                                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                                                 { pubkey: EVENT_AUTHORITY, isSigner: false, isWritable: false },
                                                 { pubkey: PUMP_FUN_PROGRAM, isSigner: false, isWritable: false }
                                             ];
@@ -638,8 +636,8 @@ export const sniperService = () => {
                                                 { pubkey: associatedUser, isSigner: false, isWritable: true },
                                                 { pubkey: wallet.publicKey, isSigner: false, isWritable: true },
                                                 { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
-                                                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                                                 { pubkey: new PublicKey(creatorVault), isSigner: false, isWritable: true },
+                                                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                                                 { pubkey: EVENT_AUTHORITY, isSigner: false, isWritable: false },
                                                 { pubkey: PUMP_FUN_PROGRAM, isSigner: false, isWritable: false }
                                             ];
@@ -766,8 +764,8 @@ export const sniperService = () => {
                                                     { pubkey: associatedUser, isSigner: false, isWritable: true },
                                                     { pubkey: wallet.publicKey, isSigner: false, isWritable: true },
                                                     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
-                                                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                                                     { pubkey: new PublicKey(creatorVault), isSigner: false, isWritable: true },
+                                                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                                                     { pubkey: EVENT_AUTHORITY, isSigner: false, isWritable: false },
                                                     { pubkey: PUMP_FUN_PROGRAM, isSigner: false, isWritable: false }
                                                 ];
