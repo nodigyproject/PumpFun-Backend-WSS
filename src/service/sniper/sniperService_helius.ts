@@ -151,7 +151,7 @@ const getMetaData = (data: any) => {
     let tokenNameLength = 0;
 
     for (let i = 0; i < byteArray.length; i++) {
-        tokenNameLength += byteArray[i] * 256
+        tokenNameLength += byteArray[i] * (256 ** i)
     }
 
     console.log('tokenName length: ', tokenNameLength);
@@ -171,7 +171,7 @@ const getMetaData = (data: any) => {
     byteArray = bytedata.slice(12 + tokenNameLength, 16 + tokenNameLength);
 
     for (let i = 0; i < byteArray.length; i++) {
-        tokenNameLength += byteArray[i] * 256
+        tokenNameLength += byteArray[i] * (256 ** i)
     }
     console.log('tokenSymbol length: ', tokenNameLength);
 
@@ -188,7 +188,7 @@ const getMetaData = (data: any) => {
     byteArray = bytedata.slice(16 + tokenNameLength + tokenSymbolLength, 20 + tokenNameLength + tokenSymbolLength);
 
     for (let i = 0; i < byteArray.length; i++) {
-        tokenNameLength += byteArray[i] * 256
+        tokenNameLength += byteArray[i] * (256 ** i)
     }
     console.log('tokenImage length: ', tokenImageLength);
 
