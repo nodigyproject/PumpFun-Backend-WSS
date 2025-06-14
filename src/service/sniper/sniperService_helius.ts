@@ -115,7 +115,7 @@ export const sniperService = () => {
 
                 const signature = messageObj.params.result.signature;
 
-                console.log(`-------------> new detect, signature: ${signature}`);
+                console.log(`New detect, signature: ${signature}`);
 
                 const instructions = messageObj.params.result.transaction.transaction.message.instructions;
 
@@ -227,7 +227,7 @@ const getMetaData = async (data: any) => {
         tokenName += String.fromCharCode(byteArray[i]);
     }
 
-    console.log('tokenName: ', tokenName);
+    console.log('-------------> tokenName: ', tokenName);
 
     ///////////////
 
@@ -245,7 +245,7 @@ const getMetaData = async (data: any) => {
     for (let i = 0; i < byteArray.length; i++) {
         tokenSymbol += String.fromCharCode(byteArray[i]);
     }
-    console.log('tokenSymbol: ', tokenSymbol);
+    console.log('-------------> tokenSymbol: ', tokenSymbol);
 
     ///////////////
     let metaDataLinkLength = 0;
@@ -262,7 +262,7 @@ const getMetaData = async (data: any) => {
     for (let i = 0; i < byteArray.length; i++) {
         metaDataLink += String.fromCharCode(byteArray[i]);
     }
-    console.log('metaDataLink: ', metaDataLink);
+    // console.log('-------------> metaDataLink: ', metaDataLink);
 
     const response = await axios.get(metaDataLink, {
         headers: {
@@ -273,7 +273,7 @@ const getMetaData = async (data: any) => {
 
     tokenImage = response.data.image;
 
-    console.log('tokenImage: ', tokenImage);
+    console.log('-------------> tokenImage: ', tokenImage);
 
     return {
         tokenName,
