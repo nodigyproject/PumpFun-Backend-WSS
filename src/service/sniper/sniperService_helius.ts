@@ -53,6 +53,7 @@ export const sniperService = () => {
     });
 
     ws.on('message', async function incoming(data) {
+
         const messageStr = data.toString('utf8');
 
         const now = Date.now();
@@ -61,6 +62,8 @@ export const sniperService = () => {
         }
         lastProcessTime = now;
 
+        console.log('new Message: ', messageStr);
+        
         /////////////// check if bot running is enabled
         if (!isRunning()) {
             // console.log('Bot is not running.');
