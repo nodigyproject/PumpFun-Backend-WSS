@@ -138,17 +138,17 @@ export const sniperService = () => {
 
                 const createPoolInstruction = pumpfunInstructions[0];
 
-                console.log('-------------> Create Pool Instructions = ', createPoolInstruction);
+                // console.log('-------------> Create Pool Instructions = ', createPoolInstruction);
 
                 const { tokenName, tokenSymbol, tokenImage } = await getMetaData(createPoolInstruction.data);
 
                 const buyInstruction = pumpfunInstructions[pumpfunInstructions.length - 1];
 
-                console.log('-------------> Buy Instructions = ', buyInstruction);
+                // console.log('-------------> Buy Instructions = ', buyInstruction);
 
                 const poolAccountKeys = buyInstruction.accounts;
 
-                console.log('-------------> poolAccountKeys = ', poolAccountKeys);
+                // console.log('-------------> poolAccountKeys = ', poolAccountKeys);
 
                 const global = poolAccountKeys[0];
 
