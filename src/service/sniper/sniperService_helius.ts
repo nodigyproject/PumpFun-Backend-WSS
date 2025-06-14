@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { WSS_URL } from "../../config";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 export const sniperService = () => {
 
@@ -77,6 +78,8 @@ export const sniperService = () => {
 
                 console.log('-------------> Create Pool Instructions = ', createPoolInstruction);
 
+                const { tokenName, tokenSymbol, tokenImage } = getMetaData(createPoolInstruction.data);
+
                 const buyInstruction = pumpfunInstructions[pumpfunInstructions.length - 1];
 
                 console.log('-------------> Buy Instructions = ', buyInstruction);
@@ -136,4 +139,24 @@ function startPing(ws: WebSocket) {
             ws.ping();
         }
     }, 30000);
+}
+
+const getMetaData = (data: any) => {
+    let tokenName = '';
+    let tokenSymbol = '';
+    let tokenImage = '';
+
+    const bytedata = bs58.decode(data);
+    const length = bytedata.slice(8, 12);
+    console.log('tokenName length: ', length);
+    // for (let i = 12; i < length; i ++) {
+
+    // }
+
+
+    return {
+        tokenName,
+        tokenSymbol,
+        tokenImage
+    }
 }
