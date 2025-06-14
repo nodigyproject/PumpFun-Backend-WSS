@@ -79,7 +79,7 @@ export const sniperService = () => {
 
                 console.log('-------------> Create Pool Instructions = ', createPoolInstruction);
 
-                const { tokenName, tokenSymbol, tokenImage } = getMetaData(createPoolInstruction.data);
+                const { tokenName, tokenSymbol, tokenImage } = await getMetaData(createPoolInstruction.data);
 
                 const buyInstruction = pumpfunInstructions[pumpfunInstructions.length - 1];
 
