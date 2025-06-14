@@ -1,8 +1,18 @@
 import WebSocket from "ws";
-import { WSS_URL } from "../../config";
+import { wallet, WSS_URL } from "../../config";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import axios from "axios";
+import { isRunning, isWorkingTime } from "../../utils/utils";
+import { getWalletBalanceFromCache } from "./getWalletBalance";
+import logger from "../../logs/logger";
+import { IAlertMsg } from "../../utils/types";
+import { PUMPFUN_IMG } from "../../utils/constants";
+import { createAlert } from "../alarm/alarm";
+import { SniperBotConfig } from "../setting/botConfigClass";
+
+let lastProcessTime = 0;
+const MIN_TOKEN_PROCESS_INTERVAL = 5000;
 
 export const sniperService = () => {
 
@@ -38,7 +48,58 @@ export const sniperService = () => {
 
     ws.on('message', async function incoming(data) {
         const messageStr = data.toString('utf8');
+
+        const now = Date.now();
+        if (now - lastProcessTime < MIN_TOKEN_PROCESS_INTERVAL) {
+            return;
+        }
+        lastProcessTime = now;
+
+        /////////////// check if bot running is enabled
+        if (!isRunning()) {
+            // console.log('Bot is not running.');
+            return;
+        }
+
+        /////////////// check if bot is in working time
+        if (!isWorkingTime()) {
+            // console.log('Bot is not in working time.');
+            return;
+        }
+
         try {
+
+            /////////////// check if wallet has enough balance
+            const walletBalance = getWalletBalanceFromCache();
+            if (walletBalance < 0.03) {
+                logger.error(
+                    `wallet balance ${walletBalance.toFixed(4)} SOL is too low (min: 0.03 SOL)`
+                );
+
+                // Create alert for low balance
+                const newAlert: IAlertMsg = {
+                    imageUrl: PUMPFUN_IMG,
+                    title: "Insufficient Wallet Balance",
+                    content: `🚨 Your wallet needs more SOL to continue trading! 
+                  Current balance: ${walletBalance.toFixed(4)} SOL. 
+                  Bot operations paused for safety. Please top up your wallet to resume.`,
+                    link: wallet.publicKey.toBase58(),
+                    time: Date.now(),
+                    isRead: false,
+                };
+
+                await createAlert(newAlert);
+
+                // Turn off the bot
+                const botMainconfig = SniperBotConfig.getMainConfig();
+                await SniperBotConfig.setMainConfig({
+                    ...botMainconfig,
+                    isRunning: false,
+                });
+
+                console.log('Bot stopped due to low sol balanace');
+                return;
+            }
 
             const messageObj = JSON.parse(messageStr);
 
@@ -117,6 +178,8 @@ export const sniperService = () => {
 
                 console.log('-------------> Event: ', event);
 
+
+
             }
         } catch (e) {
             console.error('------------------> WebSocket message handle error :', e);
@@ -156,7 +219,7 @@ const getMetaData = async (data: any) => {
         tokenNameLength += byteArray[i] * (256 ** i)
     }
 
-    console.log('tokenName length: ', tokenNameLength);
+    // console.log('tokenName length: ', tokenNameLength);
 
     byteArray = bytedata.slice(12, 12 + tokenNameLength);
 
@@ -175,7 +238,7 @@ const getMetaData = async (data: any) => {
     for (let i = 0; i < byteArray.length; i++) {
         tokenSymbolLength += byteArray[i] * (256 ** i)
     }
-    console.log('tokenSymbol length: ', tokenNameLength);
+    // console.log('tokenSymbol length: ', tokenNameLength);
 
     byteArray = bytedata.slice(16 + tokenNameLength, 16 + tokenNameLength + tokenSymbolLength);
 
@@ -192,7 +255,7 @@ const getMetaData = async (data: any) => {
     for (let i = 0; i < byteArray.length; i++) {
         metaDataLinkLength += byteArray[i] * (256 ** i)
     }
-    console.log('metaDataLink length: ', metaDataLinkLength);
+    // console.log('metaDataLink length: ', metaDataLinkLength);
 
     byteArray = bytedata.slice(20 + tokenNameLength + tokenSymbolLength, 20 + tokenNameLength + tokenSymbolLength + metaDataLinkLength);
 
