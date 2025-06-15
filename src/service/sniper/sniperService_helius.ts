@@ -554,7 +554,8 @@ export const sniperService = () => {
 
                                             if (simulation.value.err) {
                                                 console.log(`[${mint}] sell simulation error, result: `, simulation);
-                                                continue;
+                                                // continue;
+                                                break;
                                             }
 
                                             const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
@@ -673,7 +674,8 @@ export const sniperService = () => {
 
                                             if (simulation.value.err) {
                                                 console.log(`[${mint}] sell simulation error, result: `, simulation);
-                                                continue;
+                                                break;
+                                                // continue;
                                             }
 
                                             const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
@@ -803,7 +805,7 @@ export const sniperService = () => {
 
                                                 if (simulation.value.err) {
                                                     console.log(`[${mint}] sell simulation error, result: `, simulation);
-                                                    continue;
+                                                    break;
                                                 }
 
                                                 const { confirmed, signature } = await jito_executeAndConfirm(versionedTx, wallet, blockHash, jito_tip * LAMPORTS_PER_SOL);
