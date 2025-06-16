@@ -176,10 +176,10 @@ router.post("/sellall", async (req, res) => {
     }
 
 
-    if (rlt.includes(null)) {
-      logger.info("[sellall]" + " sell all failed");
-      return res.status(400).json({ message: "sell all failed." });
-    }
+    // if (rlt.includes(null)) {
+    //   logger.info("[sellall]" + " sell all failed");
+    //   return res.status(400).json({ message: "sell all failed." });
+    // }
     await SniperTxns.collection.drop();
     await AlertService.collection.drop();
     console.log(("[sellall] successfully"))
