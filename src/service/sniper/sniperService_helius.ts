@@ -77,36 +77,36 @@ export const sniperService = () => {
         try {
 
             /////////////// check if wallet has enough balance
-            // const walletBalance = getWalletBalanceFromCache();
-            // if (walletBalance < 0.03) {
-            //     logger.error(
-            //         `wallet balance ${walletBalance.toFixed(4)} SOL is too low (min: 0.03 SOL)`
-            //     );
+            const walletBalance = getWalletBalanceFromCache();
+            if (walletBalance < 0.03) {
+                logger.error(
+                    `wallet balance ${walletBalance.toFixed(4)} SOL is too low (min: 0.03 SOL)`
+                );
 
-            //     // Create alert for low balance
-            //     const newAlert: IAlertMsg = {
-            //         imageUrl: PUMPFUN_IMG,
-            //         title: "Insufficient Wallet Balance",
-            //         content: `🚨 Your wallet needs more SOL to continue trading! 
-            //       Current balance: ${walletBalance.toFixed(4)} SOL. 
-            //       Bot operations paused for safety. Please top up your wallet to resume.`,
-            //         link: wallet.publicKey.toBase58(),
-            //         time: Date.now(),
-            //         isRead: false,
-            //     };
+                // Create alert for low balance
+                const newAlert: IAlertMsg = {
+                    imageUrl: PUMPFUN_IMG,
+                    title: "Insufficient Wallet Balance",
+                    content: `🚨 Your wallet needs more SOL to continue trading! 
+                  Current balance: ${walletBalance.toFixed(4)} SOL. 
+                  Bot operations paused for safety. Please top up your wallet to resume.`,
+                    link: wallet.publicKey.toBase58(),
+                    time: Date.now(),
+                    isRead: false,
+                };
 
-            //     await createAlert(newAlert);
+                await createAlert(newAlert);
 
-            //     // Turn off the bot
-            //     const botMainconfig = SniperBotConfig.getMainConfig();
-            //     await SniperBotConfig.setMainConfig({
-            //         ...botMainconfig,
-            //         isRunning: false,
-            //     });
+                // Turn off the bot
+                const botMainconfig = SniperBotConfig.getMainConfig();
+                await SniperBotConfig.setMainConfig({
+                    ...botMainconfig,
+                    isRunning: false,
+                });
 
-            //     console.log('Bot stopped due to low sol balanace');
-            //     return;
-            // }
+                console.log('Bot stopped due to low sol balanace');
+                return;
+            }
 
             const messageObj = JSON.parse(messageStr);
 
