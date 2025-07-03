@@ -22,7 +22,7 @@ const MIN_TOKEN_PROCESS_INTERVAL = 5000;
 
 export const sniperService = () => {
 
-    console.log('----------------> sniperService --------------->');
+    console.log(`${Date.now()}----------------> sniperService --------------->`);
 
     const ws = new WebSocket(WSS_URL);
 
