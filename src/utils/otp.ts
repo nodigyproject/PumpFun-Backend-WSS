@@ -19,6 +19,9 @@ export const sendOTP2Email = async ({
   code: string;
 }) => {
   try {
+
+    console.log('sendOTP2Mail: toEmail: ', email);
+    
     // Email options
     const mailOptions = {
       from: `"Pumpfun" <noreply@loyaltyjam.com>`,
